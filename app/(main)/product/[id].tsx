@@ -1,12 +1,11 @@
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Heart, Star, Clock, TrendingUp, Utensils } from 'lucide-react-native';
@@ -25,11 +24,37 @@ export default function ProductDetail() {
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState<'S' | 'M' | 'L'>('M');
   const [isCooked, setIsCooked] = useState(false);
+  const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
   const [showSuccess, setShowSuccess] = useState(false);
 
   if (!product) {
     return null;
   }
+
+  // Default ingredients if none exist
+  const ingredients = product.ingredients || [
+    { name: '🍅 Tomato', cooked: false, calories: 20, protein: 1, fiber: 1, water: 95, fat: 0 },
+    { name: '🧅 Onion', cooked: false, calories: 40, protein: 1, fiber: 2, water: 89, fat: 0 },
+    { name: '🌶️ Pepper', cooked: false, calories: 30, protein: 1, fiber: 2, water: 92, fat: 0 },
+    { name: '🧄 Garlic', cooked: false, calories: 149, protein: 6, fiber: 2, water: 59, fat: 1 },
+  ];
+
+  const sizeMultiplier = selectedSize === 'S' ? 0.8 : selectedSize === 'L' ? 1.2 : 1;
+  const cookingPrice = isCooked ? 2 : 0;
+
+  const totalPrice = useMemo(() => {
+    return (product.price * sizeMultiplier + cookingPrice) * quantity;
+  }, [product.price, sizeMultiplier, cookingPrice, quantity]);
+
+  const toggleIngredient = (ingredientName: string) => {
+    const newSelected = new Set(selectedIngredients);
+    if (newSelected.has(ingredientName)) {
+      newSelected.delete(ingredientName);
+    } else {
+      newSelected.add(ingredientName);
+    }
+    setSelectedIngredients(newSelected);
+  };
 
   const handleAddToCart = async () => {
     await addToCart({
@@ -40,6 +65,13 @@ export default function ProductDetail() {
     });
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 2000);
+  };
+
+  const handlePurchase = () => {
+    handleAddToCart();
+    setTimeout(() => {
+      router.push('/payment' as never);
+    }, 500);
   };
 
   return (
@@ -81,7 +113,7 @@ export default function ProductDetail() {
 
           <View style={styles.metaItem}>
             <Utensils size={16} color={colors.primary} />
-            <Text style={styles.metaText}>{product.servings} DT</Text>
+            <Text style={styles.metaText}>{product.servings} servings</Text>
           </View>
         </View>
 
@@ -105,7 +137,7 @@ export default function ProductDetail() {
         </View>
 
         <View style={styles.optionsSection}>
-          <Text style={styles.optionLabel}>COOKED:</Text>
+          <Text style={styles.optionLabel}>COOKED: {isCooked && <Text style={styles.cookingPriceText}>(+2 DT)</Text>}</Text>
           <View style={styles.optionsRow}>
             <TouchableOpacity
               style={[styles.optionButton, isCooked && styles.optionButtonActive]}
@@ -121,11 +153,34 @@ export default function ProductDetail() {
             </TouchableOpacity>
           </View>
         </View>
+
+        <View style={styles.ingredientsSection}>
+          <Text style={styles.optionLabel}>INGREDIENTS:</Text>
+          <View style={styles.ingredientsGrid}>
+            {ingredients.map((ingredient, index) => (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.ingredientCard,
+                  selectedIngredients.has(ingredient.name) && styles.ingredientCardActive,
+                ]}
+                onPress={() => toggleIngredient(ingredient.name)}
+              >
+                <Text style={styles.ingredientEmoji}>{ingredient.name.split(' ')[0]}</Text>
+                <Text style={styles.ingredientName}>{ingredient.name.split(' ').slice(1).join(' ')}</Text>
+                <View style={styles.ingredientStats}>
+                  <Text style={styles.ingredientStat}>🔥 {ingredient.calories} cal</Text>
+                  <Text style={styles.ingredientStat}>🥩 {ingredient.protein}g</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
         <View style={styles.priceContainer}>
-          <Text style={styles.priceLabel}>{product.price * quantity} DT</Text>
+          <Text style={styles.priceLabel}>{totalPrice.toFixed(2)} DT</Text>
           <View style={styles.quantityControls}>
             <TouchableOpacity
               style={styles.quantityButton}
@@ -148,7 +203,7 @@ export default function ProductDetail() {
             <Text style={styles.addToCartText}>ADD TO CART</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.purchaseButton}>
+          <TouchableOpacity style={styles.purchaseButton} onPress={handlePurchase}>
             <Text style={styles.purchaseText}>PURCHASE</Text>
           </TouchableOpacity>
         </View>
@@ -158,7 +213,7 @@ export default function ProductDetail() {
         <View style={styles.successModal}>
           <View style={styles.successContent}>
             <Text style={styles.successTitle}>Added To{'\n'}Cart !</Text>
-            <Text style={styles.successSubtitle}>you can review it in your chart</Text>
+            <Text style={styles.successSubtitle}>you can review it in your cart</Text>
             <TouchableOpacity
               style={styles.successButton}
               onPress={() => {
@@ -253,6 +308,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     letterSpacing: 0.5,
   },
+  cookingPriceText: {
+    color: colors.primary,
+    fontSize: 11,
+  },
   optionsRow: {
     flexDirection: 'row',
     gap: 12,
@@ -273,6 +332,45 @@ const styles = StyleSheet.create({
   },
   optionTextActive: {
     color: colors.white,
+  },
+  ingredientsSection: {
+    marginBottom: 24,
+  },
+  ingredientsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  ingredientCard: {
+    width: '47%',
+    backgroundColor: colors.lightGray,
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  ingredientCardActive: {
+    backgroundColor: colors.primary + '20',
+    borderColor: colors.primary,
+  },
+  ingredientEmoji: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  ingredientName: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: colors.textDark,
+    marginBottom: 8,
+  },
+  ingredientStats: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  ingredientStat: {
+    fontSize: 10,
+    color: colors.textLight,
   },
   footer: {
     position: 'absolute',

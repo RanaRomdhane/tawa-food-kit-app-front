@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Animated,
+  ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, MapPin, Phone, MessageCircle } from 'lucide-react-native';
@@ -18,7 +19,7 @@ export default function TrackOrder() {
   const insets = useSafeAreaInsets();
   const { orders } = useApp();
   const [isExpanded, setIsExpanded] = useState(false);
-  const animatedHeight = useRef(new Animated.Value(200)).current;
+  const animatedHeight = useRef(new Animated.Value(240)).current;
   const routeProgress = useRef(new Animated.Value(0)).current;
 
   const ongoingOrder = orders?.find((o) => o.status === 'ongoing' && o.courier);
@@ -32,7 +33,7 @@ export default function TrackOrder() {
   }, [routeProgress]);
 
   const toggleExpand = () => {
-    const toValue = isExpanded ? 200 : 450;
+    const toValue = isExpanded ? 240 : 500;
     Animated.spring(animatedHeight, {
       toValue,
       useNativeDriver: false,
@@ -74,7 +75,7 @@ export default function TrackOrder() {
         </View>
       </View>
 
-      <Animated.View style={[styles.bottomSheet, { height: animatedHeight }]}>
+      <Animated.View style={[styles.bottomSheet, { height: animatedHeight, paddingBottom: insets.bottom + 20 }]}>
         <TouchableOpacity
           style={styles.dragHandle}
           onPress={toggleExpand}
@@ -83,95 +84,107 @@ export default function TrackOrder() {
           <View style={styles.dragIndicator} />
         </TouchableOpacity>
 
-        {ongoingOrder ? (
-          <>
-            <View style={styles.orderHeader}>
-              <Image
-                source={{ uri: ongoingOrder.courier?.avatar }}
-                style={styles.courierAvatar}
-                contentFit="cover"
-              />
-              <View style={styles.orderHeaderInfo}>
-                <Text style={styles.locationTitle}>{ongoingOrder.courier?.name}'s Location</Text>
-                <Text style={styles.orderTime}>Orderd At {ongoingOrder.date}</Text>
+        <ScrollView 
+          style={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {ongoingOrder ? (
+            <>
+              <View style={styles.orderHeader}>
+                <Image
+                  source={{ uri: ongoingOrder.courier?.avatar }}
+                  style={styles.courierAvatar}
+                  contentFit="cover"
+                />
+                <View style={styles.orderHeaderInfo}>
+                  <Text style={styles.locationTitle}>{ongoingOrder.courier?.name}'s Location</Text>
+                  <Text style={styles.orderTime}>Ordered At {ongoingOrder.date}</Text>
+                </View>
               </View>
-            </View>
 
-            <View style={styles.orderItems}>
-              {ongoingOrder.items.map((item, index) => (
-                <Text key={index} style={styles.orderItem}>
-                  {item.quantity}x {item.product.name}
-                </Text>
-              ))}
-            </View>
+              <View style={styles.orderItems}>
+                {ongoingOrder.items.map((item, index) => (
+                  <Text key={index} style={styles.orderItem}>
+                    {item.quantity}x {item.product.name}
+                  </Text>
+                ))}
+              </View>
 
-            {isExpanded && (
-              <>
-                <View style={styles.deliveryTime}>
-                  <Text style={styles.deliveryTimeValue}>20 min</Text>
-                  <Text style={styles.deliveryTimeLabel}>ESTIMATED DELIVERY TIME</Text>
+              <View style={styles.deliveryTime}>
+                <Text style={styles.deliveryTimeValue}>20 min</Text>
+                <Text style={styles.deliveryTimeLabel}>ESTIMATED DELIVERY TIME</Text>
+              </View>
+
+              <View style={styles.courierContactSection}>
+                <Text style={styles.contactLabel}>CONTACT COURIER</Text>
+                <View style={styles.contactButtons}>
+                  <TouchableOpacity
+                    style={styles.contactButton}
+                    onPress={() => router.push('/courier-call' as never)}
+                  >
+                    <Phone size={24} color={colors.white} />
+                    <Text style={styles.contactButtonText}>Call</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.contactButton}
+                    onPress={() => router.push('/courier-chat' as never)}
+                  >
+                    <MessageCircle size={24} color={colors.white} />
+                    <Text style={styles.contactButtonText}>Message</Text>
+                  </TouchableOpacity>
                 </View>
+              </View>
 
-                <View style={styles.statusList}>
-                  <View style={styles.statusItem}>
-                    <View style={[styles.statusDot, styles.statusDotActive]} />
-                    <View style={styles.statusLine} />
-                    <Text style={styles.statusText}>Your order has been received</Text>
+              {isExpanded && (
+                <>
+                  <View style={styles.statusList}>
+                    <Text style={styles.statusTitle}>ORDER STATUS</Text>
+                    <View style={styles.statusItem}>
+                      <View style={[styles.statusDot, styles.statusDotActive]} />
+                      <View style={styles.statusLine} />
+                      <Text style={styles.statusText}>Your order has been received</Text>
+                    </View>
+                    <View style={styles.statusItem}>
+                      <View style={[styles.statusDot, styles.statusDotActive]} />
+                      <View style={styles.statusLine} />
+                      <Text style={styles.statusText}>
+                        The restaurant is preparing your food
+                      </Text>
+                    </View>
+                    <View style={styles.statusItem}>
+                      <View style={[styles.statusDot, styles.statusDotInactive]} />
+                      <View style={styles.statusLine} />
+                      <Text style={[styles.statusText, styles.statusTextInactive]}>
+                        Your order has been picked up for delivery
+                      </Text>
+                    </View>
+                    <View style={styles.statusItem}>
+                      <View style={[styles.statusDot, styles.statusDotInactive]} />
+                      <View style={{ height: 0 }} />
+                      <Text style={[styles.statusText, styles.statusTextInactive]}>
+                        Order arriving soon!
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.statusItem}>
-                    <View style={[styles.statusDot, styles.statusDotActive]} />
-                    <View style={styles.statusLine} />
-                    <Text style={styles.statusText}>
-                      The restaurant is preparing your food
-                    </Text>
-                  </View>
-                  <View style={styles.statusItem}>
-                    <View style={[styles.statusDot, styles.statusDotInactive]} />
-                    <View style={styles.statusLine} />
-                    <Text style={[styles.statusText, styles.statusTextInactive]}>
-                      Your order has been picked up for delivery
-                    </Text>
-                  </View>
-                  <View style={styles.statusItem}>
-                    <View style={[styles.statusDot, styles.statusDotInactive]} />
-                    <View style={{ height: 0 }} />
-                    <Text style={[styles.statusText, styles.statusTextInactive]}>
-                      Order arriving soon!
-                    </Text>
-                  </View>
-                </View>
 
-                <View style={styles.courierInfo}>
-                  <Image
-                    source={{ uri: ongoingOrder.courier?.avatar }}
-                    style={styles.courierAvatarLarge}
-                    contentFit="cover"
-                  />
-                  <View style={styles.courierDetails}>
-                    <Text style={styles.courierName}>{ongoingOrder.courier?.name}</Text>
-                    <Text style={styles.courierLabel}>Courier</Text>
+                  <View style={styles.courierInfo}>
+                    <Image
+                      source={{ uri: ongoingOrder.courier?.avatar }}
+                      style={styles.courierAvatarLarge}
+                      contentFit="cover"
+                    />
+                    <View style={styles.courierDetails}>
+                      <Text style={styles.courierName}>{ongoingOrder.courier?.name}</Text>
+                      <Text style={styles.courierLabel}>Courier</Text>
+                    </View>
                   </View>
-                  <View style={styles.courierActions}>
-                    <TouchableOpacity
-                      style={styles.courierActionButton}
-                      onPress={() => router.push('/courier-call' as never)}
-                    >
-                      <Phone size={20} color={colors.white} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.courierActionButton}
-                      onPress={() => router.push('/courier-chat' as never)}
-                    >
-                      <MessageCircle size={20} color={colors.white} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </>
-            )}
-          </>
-        ) : (
-          <Text style={styles.noOrder}>No ongoing orders with courier</Text>
-        )}
+                </>
+              )}
+            </>
+          ) : (
+            <Text style={styles.noOrder}>No ongoing orders with courier</Text>
+          )}
+        </ScrollView>
       </Animated.View>
     </View>
   );
@@ -245,7 +258,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
-    paddingBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.1,
@@ -261,6 +273,9 @@ const styles = StyleSheet.create({
     height: 4,
     backgroundColor: colors.lightGray,
     borderRadius: 2,
+  },
+  scrollContent: {
+    flex: 1,
   },
   orderHeader: {
     flexDirection: 'row',
@@ -296,7 +311,7 @@ const styles = StyleSheet.create({
   },
   deliveryTime: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   deliveryTimeValue: {
     fontSize: 32,
@@ -308,6 +323,42 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: colors.textLight,
     marginTop: 4,
+    letterSpacing: 0.5,
+  },
+  courierContactSection: {
+    marginBottom: 24,
+  },
+  contactLabel: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: colors.textDark,
+    marginBottom: 12,
+    letterSpacing: 0.5,
+  },
+  contactButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  contactButton: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  contactButtonText: {
+    color: colors.white,
+    fontSize: 16,
+    fontWeight: '700' as const,
+  },
+  statusTitle: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: colors.textDark,
+    marginBottom: 16,
     letterSpacing: 0.5,
   },
   statusList: {
@@ -356,6 +407,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginTop: 8,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -380,18 +432,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textLight,
     marginTop: 2,
-  },
-  courierActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  courierActionButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   noOrder: {
     fontSize: 14,

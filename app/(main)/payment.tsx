@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft } from 'lucide-react-native';
@@ -22,11 +23,39 @@ export default function Payment() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { cartTotal, clearCart } = useApp();
-  const [selectedMethod, setSelectedMethod] = useState('mastercard');
+  const [selectedMethod, setSelectedMethod] = useState('cash');
 
   const handlePayment = async () => {
-    await clearCart();
-    router.replace('/order-success' as never);
+    if (selectedMethod === 'cash') {
+      Alert.alert(
+        'Cash Payment',
+        'Please give the money to the courier when your order arrives.',
+        [
+          {
+            text: 'OK',
+            onPress: async () => {
+              await clearCart();
+              router.replace('/order-success' as never);
+            },
+          },
+        ]
+      );
+    } else if (selectedMethod === 'visa' || selectedMethod === 'mastercard') {
+      Alert.alert(
+        'Card Payment',
+        'Please add your card details first.',
+        [
+          {
+            text: 'Add Card',
+            onPress: () => router.push('/add-card' as never),
+          },
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+        ]
+      );
+    }
   };
 
   return (
@@ -44,6 +73,8 @@ export default function Payment() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
         showsVerticalScrollIndicator={false}
       >
+        <Text style={styles.sectionTitle}>SELECT PAYMENT METHOD</Text>
+
         <View style={styles.methodsRow}>
           {paymentMethods.map((method) => (
             <TouchableOpacity
@@ -78,45 +109,85 @@ export default function Payment() {
           ))}
         </View>
 
-        {selectedMethod === 'mastercard' && (
-          <View style={styles.cardPreview}>
-            <View style={styles.card}>
-              <Text style={styles.cardLabel}>Master Card</Text>
-              <Text style={styles.cardNumber}>●●●●●●●●●●●● 436</Text>
+        <View style={styles.paymentDetails}>
+          {selectedMethod === 'cash' && (
+            <View style={styles.detailsCard}>
+              <Text style={styles.detailsTitle}>💵 Cash Payment</Text>
+              <Text style={styles.detailsText}>
+                Please prepare the exact amount or change for the courier when your order arrives.
+                Our delivery partner will collect the payment upon delivery.
+              </Text>
+              <View style={styles.infoBox}>
+                <Text style={styles.infoText}>💡 Tip: Have exact change ready for faster delivery!</Text>
+              </View>
             </View>
-            <TouchableOpacity 
-              style={styles.addNewButton}
-              onPress={() => router.push('/add-card' as never)}
-            >
-              <Text style={styles.addNewText}>+ ADD NEW</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+          )}
 
-        {selectedMethod === 'cash' && (
-          <View style={styles.noCardSection}>
-            <Text style={styles.noCardTitle}>No master card added</Text>
-            <Text style={styles.noCardSubtitle}>
-              You can add a mastercard and save it for later
-            </Text>
-            <TouchableOpacity 
-              style={styles.addNewButton}
-              onPress={() => router.push('/add-card' as never)}
-            >
-              <Text style={styles.addNewText}>+ ADD NEW</Text>
-            </TouchableOpacity>
+          {selectedMethod === 'visa' && (
+            <View style={styles.detailsCard}>
+              <Text style={styles.detailsTitle}>💳 Visa Card</Text>
+              <Text style={styles.detailsText}>
+                Pay securely with your Visa card. Your card details are encrypted and safe.
+              </Text>
+              <TouchableOpacity 
+                style={styles.addCardButton}
+                onPress={() => router.push('/add-card' as never)}
+              >
+                <Text style={styles.addCardText}>+ ADD VISA CARD</Text>
+              </TouchableOpacity>
+              <View style={styles.securityBadge}>
+                <Text style={styles.securityText}>🔒 Secure Payment</Text>
+              </View>
+            </View>
+          )}
+
+          {selectedMethod === 'mastercard' && (
+            <View style={styles.detailsCard}>
+              <Text style={styles.detailsTitle}>💳 Mastercard</Text>
+              <Text style={styles.detailsText}>
+                Pay securely with your Mastercard. Your card details are encrypted and safe.
+              </Text>
+              <TouchableOpacity 
+                style={styles.addCardButton}
+                onPress={() => router.push('/add-card' as never)}
+              >
+                <Text style={styles.addCardText}>+ ADD MASTERCARD</Text>
+              </TouchableOpacity>
+              <View style={styles.securityBadge}>
+                <Text style={styles.securityText}>🔒 Secure Payment</Text>
+              </View>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.orderSummary}>
+          <Text style={styles.summaryTitle}>ORDER SUMMARY</Text>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Subtotal</Text>
+            <Text style={styles.summaryValue}>{cartTotal.toFixed(2)} DT</Text>
           </View>
-        )}
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Delivery Fee</Text>
+            <Text style={styles.summaryValue}>2.00 DT</Text>
+          </View>
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabelBold}>Total</Text>
+            <Text style={styles.summaryValueBold}>{(cartTotal + 2).toFixed(2)} DT</Text>
+          </View>
+        </View>
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>TOTAL:</Text>
-          <Text style={styles.totalValue}>{cartTotal} DT</Text>
+          <Text style={styles.totalValue}>{(cartTotal + 2).toFixed(2)} DT</Text>
         </View>
 
         <TouchableOpacity style={styles.confirmButton} onPress={handlePayment}>
-          <Text style={styles.confirmButtonText}>PAY & CONFIRM</Text>
+          <Text style={styles.confirmButtonText}>
+            {selectedMethod === 'cash' ? 'CONFIRM ORDER' : 'PAY & CONFIRM'}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -153,6 +224,14 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingTop: 24,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: colors.textDark,
+    paddingHorizontal: 20,
+    marginBottom: 16,
+    letterSpacing: 0.5,
   },
   methodsRow: {
     flexDirection: 'row',
@@ -196,56 +275,136 @@ const styles = StyleSheet.create({
     color: colors.textDark,
     marginTop: 8,
   },
-  cardPreview: {
-    paddingHorizontal: 20,
+  cashIcon: {
+    fontSize: 40,
   },
-  card: {
-    backgroundColor: colors.primary,
-    borderRadius: 16,
-    padding: 24,
-    marginBottom: 16,
+  visaIcon: {
+    backgroundColor: '#1A1F71',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
   },
-  cardLabel: {
-    fontSize: 16,
-    fontWeight: '600' as const,
+  visaText: {
     color: colors.white,
-    marginBottom: 32,
-  },
-  cardNumber: {
     fontSize: 18,
     fontWeight: '700' as const,
-    color: colors.white,
-    letterSpacing: 2,
   },
-  addNewButton: {
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    paddingVertical: 16,
-    borderWidth: 2,
-    borderColor: colors.primary,
+  mastercardIcon: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  addNewText: {
-    color: colors.primary,
-    fontSize: 16,
-    fontWeight: '700' as const,
-    letterSpacing: 0.5,
+  mastercardCircle1: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#EB001B',
   },
-  noCardSection: {
+  mastercardCircle2: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F79E1B',
+    marginLeft: -12,
+  },
+  paymentDetails: {
     paddingHorizontal: 20,
-    alignItems: 'center',
+    marginBottom: 24,
   },
-  noCardTitle: {
+  detailsCard: {
+    backgroundColor: colors.lightGray,
+    borderRadius: 16,
+    padding: 20,
+  },
+  detailsTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
     color: colors.textDark,
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  noCardSubtitle: {
+  detailsText: {
     fontSize: 14,
     color: colors.textLight,
-    textAlign: 'center',
-    marginBottom: 24,
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  infoBox: {
+    backgroundColor: colors.primary + '20',
+    borderRadius: 8,
+    padding: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
+  },
+  infoText: {
+    fontSize: 12,
+    color: colors.textDark,
+  },
+  addCardButton: {
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.primary,
+    marginBottom: 12,
+  },
+  addCardText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '700' as const,
+    letterSpacing: 0.5,
+  },
+  securityBadge: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  securityText: {
+    fontSize: 12,
+    color: colors.textLight,
+    fontWeight: '600' as const,
+  },
+  orderSummary: {
+    marginHorizontal: 20,
+    backgroundColor: colors.lightGray,
+    borderRadius: 16,
+    padding: 20,
+  },
+  summaryTitle: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: colors.textDark,
+    marginBottom: 16,
+    letterSpacing: 0.5,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: colors.textLight,
+  },
+  summaryValue: {
+    fontSize: 14,
+    color: colors.textDark,
+    fontWeight: '600' as const,
+  },
+  summaryLabelBold: {
+    fontSize: 16,
+    color: colors.textDark,
+    fontWeight: '700' as const,
+  },
+  summaryValueBold: {
+    fontSize: 18,
+    color: colors.primary,
+    fontWeight: '700' as const,
+  },
+  summaryDivider: {
+    height: 1,
+    backgroundColor: colors.mediumGray,
+    marginVertical: 12,
   },
   footer: {
     position: 'absolute',
@@ -286,36 +445,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700' as const,
     letterSpacing: 0.5,
-  },
-  cashIcon: {
-    fontSize: 40,
-  },
-  visaIcon: {
-    backgroundColor: '#1A1F71',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-  },
-  visaText: {
-    color: colors.white,
-    fontSize: 18,
-    fontWeight: '700' as const,
-  },
-  mastercardIcon: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  mastercardCircle1: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#EB001B',
-  },
-  mastercardCircle2: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F79E1B',
-    marginLeft: -12,
   },
 });

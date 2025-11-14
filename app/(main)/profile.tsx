@@ -6,9 +6,21 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, User as UserIcon, MapPin, ShoppingBag, Heart, Bell, CreditCard, HelpCircle, MessageCircle } from 'lucide-react-native';
+import { 
+  ChevronLeft, 
+  User as UserIcon, 
+  MapPin, 
+  ShoppingBag, 
+  Heart, 
+  Bell, 
+  CreditCard, 
+  HelpCircle, 
+  MessageCircle,
+  LogOut
+} from 'lucide-react-native';
 import { Image } from 'expo-image';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
@@ -16,7 +28,28 @@ import colors from '@/constants/colors';
 export default function Profile() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user } = useApp();
+  const { user, logout } = useApp();
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            await logout();
+            router.replace('/login' as never);
+          },
+        },
+      ]
+    );
+  };
 
   const menuItems = [
     { icon: UserIcon, label: 'Personal Info', route: '/profile/personal-info' },
@@ -46,7 +79,7 @@ export default function Profile() {
       >
         <View style={styles.profileSection}>
           <Image
-            source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200' }}
+            source={{ uri: user?.avatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200' }}
             style={styles.avatar}
             contentFit="cover"
           />
@@ -88,6 +121,21 @@ export default function Profile() {
               <Text style={styles.menuArrow}>›</Text>
             </TouchableOpacity>
           ))}
+        </View>
+
+        <View style={styles.menuSection}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={handleLogout}
+          >
+            <View style={styles.menuItemLeft}>
+              <View style={[styles.menuIcon, { backgroundColor: '#EF444415' }]}>
+                <LogOut size={20} color="#EF4444" />
+              </View>
+              <Text style={[styles.menuLabel, { color: '#EF4444' }]}>Logout</Text>
+            </View>
+            <Text style={styles.menuArrow}>›</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </View>

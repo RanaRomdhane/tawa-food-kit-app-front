@@ -6,9 +6,12 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Alert,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft } from 'lucide-react-native';
+import { ChevronLeft, Star } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import colors from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
@@ -18,8 +21,12 @@ type Tab = 'ongoing' | 'history';
 export default function MyOrders() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { orders } = useApp();
+  const { orders, addToCart } = useApp();
   const [activeTab, setActiveTab] = useState<Tab>('ongoing');
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [rating, setRating] = useState(0);
+  const [review, setReview] = useState('');
 
   const ongoingOrders = orders?.filter((order) => order.status === 'ongoing') || [];
   const historyOrders = orders?.filter((order) => order.status !== 'ongoing') || [];
@@ -33,6 +40,76 @@ export default function MyOrders() {
   const drinkOrders = displayOrders.filter((order) =>
     order.items.every((item) => item.product.category === 'Drink')
   );
+
+  const handleCancelOrder = (orderId: string) => {
+    Alert.alert(
+      'Cancel Order',
+      'Are you sure you want to cancel this order?',
+      [
+        {
+          text: 'No',
+          style: 'cancel',
+        },
+        {
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert('Order Cancelled', 'Your order has been cancelled successfully.');
+          },
+        },
+      ]
+    );
+  };
+
+  const handleRateOrder = (orderId: string) => {
+    setSelectedOrderId(orderId);
+    setRating(0);
+    setReview('');
+    setShowRatingModal(true);
+  };
+
+  const submitRating = () => {
+    if (rating === 0) {
+      Alert.alert('Rating Required', 'Please select a rating before submitting.');
+      return;
+    }
+
+    Alert.alert(
+      'Thank You!',
+      `Your ${rating}-star rating has been submitted successfully.`,
+      [
+        {
+          text: 'OK',
+          onPress: () => {
+            setShowRatingModal(false);
+            setSelectedOrderId(null);
+            setRating(0);
+            setReview('');
+          },
+        },
+      ]
+    );
+  };
+
+  const handleReorder = async (order: typeof orders[0]) => {
+    for (const item of order.items) {
+      await addToCart(item);
+    }
+    Alert.alert(
+      'Added to Cart',
+      'All items from this order have been added to your cart.',
+      [
+        {
+          text: 'View Cart',
+          onPress: () => router.push('/cart' as never),
+        },
+        {
+          text: 'OK',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -123,16 +200,25 @@ export default function MyOrders() {
                       >
                         <Text style={styles.trackButtonText}>Track Order</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.cancelButton}>
+                      <TouchableOpacity 
+                        style={styles.cancelButton}
+                        onPress={() => handleCancelOrder(order.id)}
+                      >
                         <Text style={styles.cancelButtonText}>Cancel</Text>
                       </TouchableOpacity>
                     </>
                   ) : (
                     <>
-                      <TouchableOpacity style={styles.rateButton}>
+                      <TouchableOpacity 
+                        style={styles.rateButton}
+                        onPress={() => handleRateOrder(order.id)}
+                      >
                         <Text style={styles.rateButtonText}>Rate</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.reorderButton}>
+                      <TouchableOpacity 
+                        style={styles.reorderButton}
+                        onPress={() => handleReorder(order)}
+                      >
                         <Text style={styles.reorderButtonText}>Re-Order</Text>
                       </TouchableOpacity>
                     </>
@@ -178,16 +264,25 @@ export default function MyOrders() {
                       >
                         <Text style={styles.trackButtonText}>Track Order</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.cancelButton}>
+                      <TouchableOpacity 
+                        style={styles.cancelButton}
+                        onPress={() => handleCancelOrder(order.id)}
+                      >
                         <Text style={styles.cancelButtonText}>Cancel</Text>
                       </TouchableOpacity>
                     </>
                   ) : (
                     <>
-                      <TouchableOpacity style={styles.rateButton}>
+                      <TouchableOpacity 
+                        style={styles.rateButton}
+                        onPress={() => handleRateOrder(order.id)}
+                      >
                         <Text style={styles.rateButtonText}>Rate</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.reorderButton}>
+                      <TouchableOpacity 
+                        style={styles.reorderButton}
+                        onPress={() => handleReorder(order)}
+                      >
                         <Text style={styles.reorderButtonText}>Re-Order</Text>
                       </TouchableOpacity>
                     </>
@@ -213,6 +308,60 @@ export default function MyOrders() {
           </View>
         )}
       </ScrollView>
+
+      <Modal
+        visible={showRatingModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowRatingModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Rate Your Order</Text>
+            
+            <View style={styles.starsContainer}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <TouchableOpacity
+                  key={star}
+                  onPress={() => setRating(star)}
+                  style={styles.starButton}
+                >
+                  <Star
+                    size={40}
+                    color={star <= rating ? colors.yellow : colors.lightGray}
+                    fill={star <= rating ? colors.yellow : colors.lightGray}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TextInput
+              style={styles.reviewInput}
+              placeholder="Write your review (optional)"
+              placeholderTextColor={colors.mediumGray}
+              value={review}
+              onChangeText={setReview}
+              multiline
+              numberOfLines={4}
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => setShowRatingModal(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalSubmitButton}
+                onPress={submitRating}
+              >
+                <Text style={styles.modalSubmitText}>Submit</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -414,5 +563,73 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: colors.textLight,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  modalContent: {
+    backgroundColor: colors.white,
+    borderRadius: 24,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: '700' as const,
+    color: colors.textDark,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  starsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 24,
+  },
+  starButton: {
+    padding: 4,
+  },
+  reviewInput: {
+    backgroundColor: colors.lightGray,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 14,
+    color: colors.textDark,
+    marginBottom: 24,
+    textAlignVertical: 'top',
+    minHeight: 100,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalCancelButton: {
+    flex: 1,
+    backgroundColor: colors.lightGray,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: colors.textDark,
+  },
+  modalSubmitButton: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  modalSubmitText: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: colors.white,
   },
 });
