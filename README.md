@@ -82,5 +82,10 @@ npm install --legacy-peer-deps
 # Use npx instead:
 npx expo start
 ```
+## 📱 App Screenshots
+Here are some screenshots demonstrating the application's interfaces :
+<p align="center">
+  <img src="Screenshots/1.png" width="200" alt="Screenshot 1" />
+</p>
 
 That's it! Scan the QR code with your phone to start using Tawa Food Kit App 🎉
