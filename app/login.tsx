@@ -9,6 +9,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Facebook, Twitter } from 'lucide-react-native';
@@ -23,10 +25,55 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
 
   const handleLogin = async () => {
-    await login(email, password);
-    router.replace('/(main)/home' as never);
+    // Validation
+    if (!email || !password) {
+      Alert.alert('Missing Information', 'Please fill in all fields');
+      return;
+    }
+
+    if (!validateEmail(email)) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address');
+      return;
+    }
+
+    if (password.length < 6) {
+      Alert.alert('Invalid Password', 'Password must be at least 6 characters');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await login(email.trim().toLowerCase(), password);
+      // Navigation will be handled by auth state change in AppContext
+      router.replace('/(main)/home' as never);
+    } catch (error: any) {
+      console.error('Login error:', error);
+      
+      // Handle specific error messages
+      let errorMessage = 'An error occurred during login';
+      
+      if (error.message?.includes('Invalid login credentials')) {
+        errorMessage = 'Invalid email or password. Please try again.';
+      } else if (error.message?.includes('Email not confirmed')) {
+        errorMessage = 'Please verify your email before logging in.';
+      } else if (error.message?.includes('network')) {
+        errorMessage = 'Network error. Please check your connection.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert('Login Failed', errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -92,6 +139,8 @@ export default function Login() {
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoCorrect={false}
+                editable={!loading}
               />
             </View>
 
@@ -105,10 +154,12 @@ export default function Login() {
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
+                  editable={!loading}
                 />
                 <TouchableOpacity
                   onPress={() => setShowPassword(!showPassword)}
                   style={styles.eyeButton}
+                  disabled={loading}
                 >
                   <Text style={styles.eyeIcon}>{showPassword ? '👁' : '👁️‍🗨️'}</Text>
                 </TouchableOpacity>
@@ -119,6 +170,7 @@ export default function Login() {
               <TouchableOpacity
                 style={styles.checkboxContainer}
                 onPress={() => setRememberMe(!rememberMe)}
+                disabled={loading}
               >
                 <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
                   {rememberMe && <View style={styles.checkmark} />}
@@ -126,18 +178,33 @@ export default function Login() {
                 <Text style={styles.checkboxLabel}>Remember me</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={() => router.push('/forgot-password' as never)}>
+              <TouchableOpacity 
+                onPress={() => router.push('/forgot-password' as never)}
+                disabled={loading}
+              >
                 <Text style={styles.forgotPassword}>Forgot Password</Text>
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.loginButton} onPress={handleLogin} activeOpacity={0.8}>
-              <Text style={styles.loginButtonText}>LOG IN</Text>
+            <TouchableOpacity 
+              style={[styles.loginButton, loading && styles.loginButtonDisabled]} 
+              onPress={handleLogin} 
+              activeOpacity={0.8}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color={colors.white} size="small" />
+              ) : (
+                <Text style={styles.loginButtonText}>LOG IN</Text>
+              )}
             </TouchableOpacity>
 
             <View style={styles.signupRow}>
               <Text style={styles.signupText}>Don&apos;t have an account? </Text>
-              <TouchableOpacity onPress={() => router.push('/signup' as never)}>
+              <TouchableOpacity 
+                onPress={() => router.push('/signup' as never)}
+                disabled={loading}
+              >
                 <Text style={styles.signupLink}>SIGN UP</Text>
               </TouchableOpacity>
             </View>
@@ -145,15 +212,27 @@ export default function Login() {
             <Text style={styles.orText}>Or</Text>
 
             <View style={styles.socialButtons}>
-              <TouchableOpacity style={[styles.socialButton, styles.facebookButton]}>
+              <TouchableOpacity 
+                style={[styles.socialButton, styles.facebookButton]}
+                disabled={loading}
+                onPress={() => Alert.alert('Coming Soon', 'Facebook login will be available soon')}
+              >
                 <Facebook size={24} color={colors.white} />
               </TouchableOpacity>
 
-              <TouchableOpacity style={[styles.socialButton, styles.twitterButton]}>
+              <TouchableOpacity 
+                style={[styles.socialButton, styles.twitterButton]}
+                disabled={loading}
+                onPress={() => Alert.alert('Coming Soon', 'Twitter login will be available soon')}
+              >
                 <Twitter size={24} color={colors.white} />
               </TouchableOpacity>
 
-              <TouchableOpacity style={[styles.socialButton, styles.appleButton]}>
+              <TouchableOpacity 
+                style={[styles.socialButton, styles.appleButton]}
+                disabled={loading}
+                onPress={() => Alert.alert('Coming Soon', 'Apple login will be available soon')}
+              >
                 <Text style={styles.appleIcon}></Text>
               </TouchableOpacity>
             </View>
@@ -302,6 +381,11 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     marginBottom: 24,
+    minHeight: 54,
+    justifyContent: 'center',
+  },
+  loginButtonDisabled: {
+    opacity: 0.6,
   },
   loginButtonText: {
     color: colors.white,

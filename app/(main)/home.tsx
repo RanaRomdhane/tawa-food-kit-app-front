@@ -9,25 +9,27 @@ import {
   Modal,
   Animated,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, ShoppingBag, User, Mic, X } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import { Image } from 'expo-image';
 import { useApp } from '@/contexts/AppContext';
-import { products, reviews } from '@/mocks/data';
+import { useProducts } from '@/hooks/useProducts';
 import colors from '@/constants/colors';
 
 export default function Home() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, selectedAddress, cart } = useApp();
+  const { data: products, isLoading, error } = useProducts();
   const [showMicModal, setShowMicModal] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const pulseAnim = useState(new Animated.Value(1))[0];
 
-  const featuredProducts = products.slice(0, 3);
+  const featuredProducts = products?.slice(0, 3) || [];
 
   const startRecording = async () => {
     try {
@@ -118,7 +120,9 @@ export default function Home() {
 
         <View style={styles.deliverTo}>
           <Text style={styles.deliverLabel}>DELIVER TO</Text>
-          <Text style={styles.location}>{selectedAddress?.label || 'Ariana'}</Text>
+          <Text style={styles.location}>
+            {selectedAddress?.label || 'Ariana'}
+          </Text>
         </View>
 
         <TouchableOpacity onPress={() => router.push('/cart' as never)}>
@@ -140,7 +144,8 @@ export default function Home() {
       >
         <View style={styles.greeting}>
           <Text style={styles.greetingText}>
-            Hey {user?.name?.split(' ')[0] || 'Rana'}, <Text style={styles.greetingBold}>Good Afternoon!</Text>
+            Hey {user?.name?.split(' ')[0] || 'there'},{' '}
+            <Text style={styles.greetingBold}>Good Afternoon!</Text>
           </Text>
         </View>
 
@@ -160,45 +165,142 @@ export default function Home() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>All Categories</Text>
+            <Text style={styles.sectionTitle}>Featured Dishes</Text>
             <TouchableOpacity onPress={() => router.push('/search' as never)}>
               <Text style={styles.seeAll}>See All</Text>
             </TouchableOpacity>
           </View>
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesScroll}>
-            {featuredProducts.map((product) => (
-              <TouchableOpacity
-                key={product.id}
-                style={styles.categoryCard}
-                onPress={() => router.push(`/product/${product.id}` as never)}
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={styles.loadingText}>Loading delicious meals...</Text>
+            </View>
+          ) : error ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>Failed to load products</Text>
+              <TouchableOpacity 
+                style={styles.retryButton}
+                onPress={() => window.location.reload()}
               >
-                <Image source={{ uri: product.image }} style={styles.categoryImage} contentFit="cover" />
-                <View style={styles.categoryInfo}>
-                  <Text style={styles.categoryName} numberOfLines={1}>
-                    {product.name}
-                  </Text>
-                  <Text style={styles.categoryPrice}>Starting {product.price} DT</Text>
-                </View>
+                <Text style={styles.retryButtonText}>Retry</Text>
               </TouchableOpacity>
-            ))}
-          </ScrollView>
+            </View>
+          ) : featuredProducts.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No products available yet</Text>
+            </View>
+          ) : (
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false} 
+              style={styles.categoriesScroll}
+            >
+              {featuredProducts.map((product) => (
+                <TouchableOpacity
+                  key={product.id}
+                  style={styles.categoryCard}
+                  onPress={() => router.push(`/product/${product.id}` as never)}
+                >
+                  <Image 
+                    source={{ uri: product.image }} 
+                    style={styles.categoryImage} 
+                    contentFit="cover" 
+                  />
+                  <View style={styles.categoryInfo}>
+                    <Text style={styles.categoryName} numberOfLines={1}>
+                      {product.name}
+                    </Text>
+                    <Text style={styles.categoryPrice}>
+                      Starting {product.price} DT
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Reviews</Text>
-
-          {reviews.map((review) => (
-            <View key={review.id} style={styles.reviewCard}>
-              <Image source={{ uri: review.user.avatar }} style={styles.reviewAvatar} contentFit="cover" />
-              <View style={styles.reviewContent}>
-                <Text style={styles.reviewName}>{review.user.name}</Text>
-                <Text style={styles.reviewComment} numberOfLines={2}>
-                  {review.comment}
-                </Text>
-              </View>
+        {/* Popular Categories Section */}
+        {!isLoading && products && products.length > 3 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Popular Categories</Text>
             </View>
-          ))}
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoriesRow}
+            >
+              {['Tunisian', 'Italian', 'American', 'Seafood'].map((category) => {
+                const categoryProducts = products.filter(p => p.category === category);
+                if (categoryProducts.length === 0) return null;
+                
+                return (
+                  <TouchableOpacity
+                    key={category}
+                    style={styles.categoryBadge}
+                    onPress={() => router.push('/search' as never)}
+                  >
+                    <Text style={styles.categoryBadgeText}>{category}</Text>
+                    <Text style={styles.categoryBadgeCount}>
+                      {categoryProducts.length} items
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Quick Stats Section */}
+        <View style={styles.statsSection}>
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>{products?.length || 0}</Text>
+            <Text style={styles.statLabel}>Available Dishes</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>4.8★</Text>
+            <Text style={styles.statLabel}>Average Rating</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>20-45min</Text>
+            <Text style={styles.statLabel}>Delivery Time</Text>
+          </View>
+        </View>
+
+        {/* Why Choose Us Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Why Choose Tawa?</Text>
+          <View style={styles.featuresContainer}>
+            <View style={styles.featureItem}>
+              <View style={styles.featureIcon}>
+                <Text style={styles.featureEmoji}>🍳</Text>
+              </View>
+              <Text style={styles.featureTitle}>Fresh Ingredients</Text>
+              <Text style={styles.featureDesc}>
+                All ingredients are fresh and locally sourced
+              </Text>
+            </View>
+            <View style={styles.featureItem}>
+              <View style={styles.featureIcon}>
+                <Text style={styles.featureEmoji}>⚡</Text>
+              </View>
+              <Text style={styles.featureTitle}>Fast Delivery</Text>
+              <Text style={styles.featureDesc}>
+                Get your meal kits delivered in 20-45 minutes
+              </Text>
+            </View>
+            <View style={styles.featureItem}>
+              <View style={styles.featureIcon}>
+                <Text style={styles.featureEmoji}>📖</Text>
+              </View>
+              <Text style={styles.featureTitle}>Easy Recipes</Text>
+              <Text style={styles.featureDesc}>
+                Step-by-step instructions for perfect meals
+              </Text>
+            </View>
+          </View>
         </View>
       </ScrollView>
 
@@ -227,6 +329,9 @@ export default function Home() {
 
             <Text style={styles.micText}>
               {isRecording ? 'Listening...' : 'Tap to start'}
+            </Text>
+            <Text style={styles.micSubtext}>
+              Try saying "Show me Tunisian dishes"
             </Text>
           </View>
         </View>
@@ -351,6 +456,44 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '600' as const,
   },
+  loadingContainer: {
+    paddingVertical: 60,
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: colors.textLight,
+  },
+  errorContainer: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  errorText: {
+    fontSize: 14,
+    color: colors.error,
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
+  emptyContainer: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: colors.textLight,
+  },
   categoriesScroll: {
     paddingLeft: 20,
   },
@@ -383,40 +526,90 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textLight,
   },
-  reviewCard: {
-    flexDirection: 'row',
+  categoriesRow: {
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  categoryBadge: {
+    backgroundColor: colors.lightBlue,
     paddingHorizontal: 20,
     paddingVertical: 12,
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: colors.white,
-    marginBottom: 8,
     borderRadius: 12,
-    marginHorizontal: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
+    alignItems: 'center',
   },
-  reviewAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-  },
-  reviewContent: {
-    flex: 1,
-  },
-  reviewName: {
+  categoryBadgeText: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '700' as const,
     color: colors.textDark,
     marginBottom: 4,
   },
-  reviewComment: {
+  categoryBadgeCount: {
+    fontSize: 12,
+    color: colors.textLight,
+  },
+  statsSection: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    gap: 12,
+    marginBottom: 24,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: colors.lightGray,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    color: colors.primary,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 11,
+    color: colors.textLight,
+    textAlign: 'center',
+  },
+  featuresContainer: {
+    paddingHorizontal: 20,
+    gap: 16,
+  },
+  featureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.lightGray,
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
+  },
+  featureIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  featureEmoji: {
+    fontSize: 24,
+  },
+  featureTitle: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: colors.textDark,
+    marginBottom: 2,
+    flex: 1,
+  },
+  featureDesc: {
     fontSize: 12,
     color: colors.textLight,
     lineHeight: 16,
+    flex: 1,
+    position: 'absolute',
+    left: 76,
+    right: 16,
+    top: 34,
   },
   micModalOverlay: {
     flex: 1,
@@ -455,5 +648,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
     color: colors.textDark,
+    marginBottom: 8,
+  },
+  micSubtext: {
+    fontSize: 12,
+    color: colors.textLight,
+    textAlign: 'center',
   },
 });
