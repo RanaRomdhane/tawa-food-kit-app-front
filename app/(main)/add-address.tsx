@@ -1,5 +1,5 @@
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, MapPin } from 'lucide-react-native';
@@ -17,24 +18,63 @@ import { Address } from '@/types';
 export default function AddAddress() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { addAddress } = useApp();
-  const [address, setAddress] = useState('Rue Des Entrepreneurs, Charguia2, Ariana');
-  const [street, setStreet] = useState('Abu-Nawas');
-  const [postCode, setPostCode] = useState('34567');
-  const [apartment, setApartment] = useState('345');
-  const [selectedLabel, setSelectedLabel] = useState<'Home' | 'School' | 'Other'>('School');
+  const params = useLocalSearchParams();
+  const { addAddress, updateAddress, addresses } = useApp();
+  
+  // Check if we're editing an existing address
+  const editId = params.id as string | undefined;
+  const existingAddress = addresses.find(a => a.id === editId);
 
-  const handleSave = () => {
-    const newAddress: Address = {
-      id: Date.now().toString(),
-      label: selectedLabel,
-      fullAddress: address,
-      street,
-      postCode,
-      apartment,
-    };
-    addAddress(newAddress);
-    router.back();
+  const [address, setAddress] = useState('');
+  const [street, setStreet] = useState('');
+  const [postCode, setPostCode] = useState('');
+  const [apartment, setApartment] = useState('');
+  const [selectedLabel, setSelectedLabel] = useState<'Home' | 'School' | 'Other'>('Home');
+
+  // Load existing address data if editing
+  useEffect(() => {
+    if (existingAddress) {
+      setAddress(existingAddress.fullAddress);
+      setStreet(existingAddress.street);
+      setPostCode(existingAddress.postCode);
+      setApartment(existingAddress.apartment);
+      setSelectedLabel(existingAddress.label);
+    }
+  }, [existingAddress]);
+
+  const handleSave = async () => {
+    if (!address.trim() || !street.trim() || !postCode.trim()) {
+      Alert.alert('Validation Error', 'Please fill in all required fields');
+      return;
+    }
+
+    try {
+      if (editId && existingAddress) {
+        // Update existing address
+        await updateAddress(editId, {
+          label: selectedLabel,
+          fullAddress: address,
+          street,
+          postCode,
+          apartment,
+          id: editId,
+        });
+        Alert.alert('Success', 'Address updated successfully');
+      } else {
+        // Add new address
+        await addAddress({
+          label: selectedLabel,
+          fullAddress: address,
+          street,
+          postCode,
+          apartment,
+        });
+        Alert.alert('Success', 'Address added successfully');
+      }
+      router.back();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to save address');
+    }
   };
 
   return (
@@ -43,6 +83,10 @@ export default function AddAddress() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ChevronLeft size={24} color={colors.white} />
         </TouchableOpacity>
+        <Text style={styles.headerTitle}>
+          {editId ? 'Edit Address' : 'Add Address'}
+        </Text>
+        <View style={{ width: 40 }} />
       </View>
 
       <View style={styles.mapContainer}>
@@ -63,13 +107,14 @@ export default function AddAddress() {
       >
         <View style={styles.form}>
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>ADDRESS</Text>
+            <Text style={styles.label}>ADDRESS *</Text>
             <View style={styles.inputContainer}>
               <MapPin size={20} color={colors.mediumGray} />
               <TextInput
                 style={styles.input}
                 value={address}
                 onChangeText={setAddress}
+                placeholder="Enter full address"
                 placeholderTextColor={colors.mediumGray}
               />
             </View>
@@ -77,25 +122,27 @@ export default function AddAddress() {
 
           <View style={styles.row}>
             <View style={[styles.inputGroup, { flex: 1, marginRight: 12 }]}>
-              <Text style={styles.label}>STREET</Text>
+              <Text style={styles.label}>STREET *</Text>
               <View style={styles.inputContainer}>
                 <TextInput
                   style={styles.input}
                   value={street}
                   onChangeText={setStreet}
+                  placeholder="Street name"
                   placeholderTextColor={colors.mediumGray}
                 />
               </View>
             </View>
 
             <View style={[styles.inputGroup, { flex: 1 }]}>
-              <Text style={styles.label}>POST CODE</Text>
+              <Text style={styles.label}>POST CODE *</Text>
               <View style={styles.inputContainer}>
                 <TextInput
                   style={styles.input}
                   value={postCode}
                   onChangeText={setPostCode}
                   keyboardType="numeric"
+                  placeholder="Post code"
                   placeholderTextColor={colors.mediumGray}
                 />
               </View>
@@ -103,12 +150,13 @@ export default function AddAddress() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>APPARTMENT</Text>
+            <Text style={styles.label}>APARTMENT</Text>
             <View style={styles.inputContainer}>
               <TextInput
                 style={styles.input}
                 value={apartment}
                 onChangeText={setApartment}
+                placeholder="Apartment number"
                 placeholderTextColor={colors.mediumGray}
               />
             </View>
@@ -117,22 +165,6 @@ export default function AddAddress() {
           <View style={styles.inputGroup}>
             <Text style={styles.label}>LABEL AS</Text>
             <View style={styles.labelOptions}>
-              <TouchableOpacity
-                style={[
-                  styles.labelOption,
-                  selectedLabel === 'School' && styles.labelOptionActive,
-                ]}
-                onPress={() => setSelectedLabel('School')}
-              >
-                <Text
-                  style={[
-                    styles.labelOptionText,
-                    selectedLabel === 'School' && styles.labelOptionTextActive,
-                  ]}
-                >
-                  School
-                </Text>
-              </TouchableOpacity>
               <TouchableOpacity
                 style={[
                   styles.labelOption,
@@ -147,6 +179,22 @@ export default function AddAddress() {
                   ]}
                 >
                   Home
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.labelOption,
+                  selectedLabel === 'School' && styles.labelOptionActive,
+                ]}
+                onPress={() => setSelectedLabel('School')}
+              >
+                <Text
+                  style={[
+                    styles.labelOptionText,
+                    selectedLabel === 'School' && styles.labelOptionTextActive,
+                  ]}
+                >
+                  School
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -169,7 +217,9 @@ export default function AddAddress() {
           </View>
 
           <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-            <Text style={styles.saveButtonText}>SAVE LOCATION</Text>
+            <Text style={styles.saveButtonText}>
+              {editId ? 'UPDATE LOCATION' : 'SAVE LOCATION'}
+            </Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -190,6 +240,14 @@ const styles = StyleSheet.create({
     zIndex: 10,
     paddingHorizontal: 20,
     paddingTop: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: colors.white,
   },
   backButton: {
     width: 40,

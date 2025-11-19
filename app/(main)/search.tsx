@@ -1,5 +1,5 @@
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Search as SearchIcon, SlidersHorizontal } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import colors from '@/constants/colors';
-import { products } from '@/mocks/data';
+import { useProducts } from '@/hooks/useProducts';
 
 type Cuisine = 'Tunisian' | 'French' | 'Italian' | 'American' | 'Seafood';
 type MealType = 'Breakfast' | 'Lunch' | 'Dinner';
@@ -22,6 +22,9 @@ type DeliverTime = '10-15 min' | '60 min' | '120 min';
 export default function SearchScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams();
+  const { data: products } = useProducts();
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
 
@@ -35,13 +38,20 @@ export default function SearchScreen() {
   const mealTypes: MealType[] = ['Breakfast', 'Lunch', 'Dinner'];
   const deliverTimes: DeliverTime[] = ['10-15 min', '60 min', '120 min'];
 
-  const filteredProducts = products.filter((product) => {
+  // Apply category from params if provided
+  useEffect(() => {
+    if (params.category && typeof params.category === 'string') {
+      setSelectedCuisine(params.category as Cuisine);
+    }
+  }, [params.category]);
+
+  const filteredProducts = products?.filter((product) => {
     const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCuisine = !selectedCuisine || product.category === selectedCuisine;
     const matchesPrice = product.price >= priceRange.min && product.price <= priceRange.max;
     const matchesRating = selectedRating === 0 || product.rating >= selectedRating;
     return matchesSearch && matchesCuisine && matchesPrice && matchesRating;
-  });
+  }) || [];
 
   const resetFilters = () => {
     setSelectedCuisine(null);
@@ -57,7 +67,9 @@ export default function SearchScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ChevronLeft size={24} color={colors.textDark} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>PRODUCTS</Text>
+        <Text style={styles.headerTitle}>
+          {selectedCuisine ? `${selectedCuisine} DISHES` : 'PRODUCTS'}
+        </Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -85,7 +97,16 @@ export default function SearchScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
       >
-        <Text style={styles.sectionTitle}>Our Food Kits</Text>
+        <View style={styles.resultsHeader}>
+          <Text style={styles.sectionTitle}>
+            {filteredProducts.length} {selectedCuisine ? selectedCuisine : ''} Food Kits
+          </Text>
+          {selectedCuisine && (
+            <TouchableOpacity onPress={resetFilters}>
+              <Text style={styles.clearFilter}>Clear Filter</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         <View style={styles.productsGrid}>
           {filteredProducts.map((product) => (
@@ -109,6 +130,15 @@ export default function SearchScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
+        {filteredProducts.length === 0 && (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>No products found</Text>
+            <TouchableOpacity onPress={resetFilters} style={styles.resetButton}>
+              <Text style={styles.resetButtonText}>Reset Filters</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
 
       <Modal
@@ -248,7 +278,11 @@ export default function SearchScreen() {
               </View>
 
               <TouchableOpacity style={styles.filterButton2} onPress={() => setShowFilters(false)}>
-                <Text style={styles.filterButtonText}>FILTER</Text>
+                <Text style={styles.filterButtonText}>APPLY FILTERS</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.resetFiltersButton} onPress={resetFilters}>
+                <Text style={styles.resetFiltersText}>Reset All Filters</Text>
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -317,11 +351,21 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
   },
+  resultsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
     color: colors.textDark,
-    marginBottom: 16,
+  },
+  clearFilter: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '600' as const,
   },
   productsGrid: {
     flexDirection: 'row',
@@ -374,6 +418,26 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: colors.white,
     fontWeight: '700' as const,
+  },
+  emptyState: {
+    paddingVertical: 60,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 16,
+    color: colors.textLight,
+    marginBottom: 16,
+  },
+  resetButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  resetButtonText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: '600' as const,
   },
   modalOverlay: {
     flex: 1,
@@ -496,5 +560,15 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     color: colors.white,
     letterSpacing: 0.5,
+  },
+  resetFiltersButton: {
+    marginTop: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  resetFiltersText: {
+    fontSize: 14,
+    color: colors.textLight,
+    fontWeight: '600' as const,
   },
 });

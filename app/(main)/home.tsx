@@ -111,6 +111,23 @@ export default function Home() {
     }
   };
 
+  // Get unique categories with product counts
+  const categories = React.useMemo(() => {
+    if (!products) return [];
+    const categoryMap = new Map<string, number>();
+    products.forEach(p => {
+      categoryMap.set(p.category, (categoryMap.get(p.category) || 0) + 1);
+    });
+    return Array.from(categoryMap.entries()).map(([name, count]) => ({ name, count }));
+  }, [products]);
+
+  const handleCategoryPress = (categoryName: string) => {
+    router.push({
+      pathname: '/search',
+      params: { category: categoryName }
+    } as never);
+  };
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -222,7 +239,7 @@ export default function Home() {
         </View>
 
         {/* Popular Categories Section */}
-        {!isLoading && products && products.length > 3 && (
+        {!isLoading && categories.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Popular Categories</Text>
@@ -232,23 +249,18 @@ export default function Home() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.categoriesRow}
             >
-              {['Tunisian', 'Italian', 'American', 'Seafood'].map((category) => {
-                const categoryProducts = products.filter(p => p.category === category);
-                if (categoryProducts.length === 0) return null;
-                
-                return (
-                  <TouchableOpacity
-                    key={category}
-                    style={styles.categoryBadge}
-                    onPress={() => router.push('/search' as never)}
-                  >
-                    <Text style={styles.categoryBadgeText}>{category}</Text>
-                    <Text style={styles.categoryBadgeCount}>
-                      {categoryProducts.length} items
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+              {categories.map((category) => (
+                <TouchableOpacity
+                  key={category.name}
+                  style={styles.categoryBadge}
+                  onPress={() => handleCategoryPress(category.name)}
+                >
+                  <Text style={styles.categoryBadgeText}>{category.name}</Text>
+                  <Text style={styles.categoryBadgeCount}>
+                    {category.count} items
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </ScrollView>
           </View>
         )}
@@ -269,7 +281,7 @@ export default function Home() {
           </View>
         </View>
 
-        {/* Why Choose Us Section */}
+        {/* Why Choose Us Section - FIXED LAYOUT */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Why Choose Tawa?</Text>
           <View style={styles.featuresContainer}>
@@ -277,28 +289,34 @@ export default function Home() {
               <View style={styles.featureIcon}>
                 <Text style={styles.featureEmoji}>🍳</Text>
               </View>
-              <Text style={styles.featureTitle}>Fresh Ingredients</Text>
-              <Text style={styles.featureDesc}>
-                All ingredients are fresh and locally sourced
-              </Text>
+              <View style={styles.featureTextContainer}>
+                <Text style={styles.featureTitle}>Fresh Ingredients</Text>
+                <Text style={styles.featureDesc}>
+                  All ingredients are fresh and locally sourced
+                </Text>
+              </View>
             </View>
             <View style={styles.featureItem}>
               <View style={styles.featureIcon}>
                 <Text style={styles.featureEmoji}>⚡</Text>
               </View>
-              <Text style={styles.featureTitle}>Fast Delivery</Text>
-              <Text style={styles.featureDesc}>
-                Get your meal kits delivered in 20-45 minutes
-              </Text>
+              <View style={styles.featureTextContainer}>
+                <Text style={styles.featureTitle}>Fast Delivery</Text>
+                <Text style={styles.featureDesc}>
+                  Get your meal kits delivered in 20-45 minutes
+                </Text>
+              </View>
             </View>
             <View style={styles.featureItem}>
               <View style={styles.featureIcon}>
                 <Text style={styles.featureEmoji}>📖</Text>
               </View>
-              <Text style={styles.featureTitle}>Easy Recipes</Text>
-              <Text style={styles.featureDesc}>
-                Step-by-step instructions for perfect meals
-              </Text>
+              <View style={styles.featureTextContainer}>
+                <Text style={styles.featureTitle}>Easy Recipes</Text>
+                <Text style={styles.featureDesc}>
+                  Step-by-step instructions for perfect meals
+                </Text>
+              </View>
             </View>
           </View>
         </View>
@@ -577,7 +595,7 @@ const styles = StyleSheet.create({
   },
   featureItem: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     backgroundColor: colors.lightGray,
     borderRadius: 12,
     padding: 16,
@@ -594,22 +612,19 @@ const styles = StyleSheet.create({
   featureEmoji: {
     fontSize: 24,
   },
+  featureTextContainer: {
+    flex: 1,
+  },
   featureTitle: {
     fontSize: 14,
     fontWeight: '700' as const,
     color: colors.textDark,
-    marginBottom: 2,
-    flex: 1,
+    marginBottom: 4,
   },
   featureDesc: {
     fontSize: 12,
     color: colors.textLight,
     lineHeight: 16,
-    flex: 1,
-    position: 'absolute',
-    left: 76,
-    right: 16,
-    top: 34,
   },
   micModalOverlay: {
     flex: 1,

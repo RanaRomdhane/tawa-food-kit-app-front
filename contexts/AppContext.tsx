@@ -14,6 +14,7 @@ export const [AppContext, useApp] = createContextHook(() => {
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [favorites, setFavorites] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,13 +23,11 @@ export const [AppContext, useApp] = createContextHook(() => {
 
   const initializeApp = async () => {
     try {
-      // Check onboarding status
       const onboardingComplete = await AsyncStorage.getItem('onboardingComplete');
       if (onboardingComplete) {
         setHasCompletedOnboarding(true);
       }
 
-      // Check authentication
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session?.user) {
@@ -36,7 +35,6 @@ export const [AppContext, useApp] = createContextHook(() => {
         await loadUserData(session.user.id);
       }
 
-      // Listen to auth changes
       const { data: { subscription } } = supabase.auth.onAuthStateChange(
         async (_event, session) => {
           if (session?.user) {
@@ -106,34 +104,71 @@ export const [AppContext, useApp] = createContextHook(() => {
       const { data: cartData } = await supabase
         .from('cart')
         .select(`
-          *,
+          id,
+          quantity,
+          size,
+          cooked,
           products (*)
         `)
         .eq('user_id', userId);
 
       if (cartData) {
-        const formattedCart: CartItem[] = cartData.map(item => ({
-          product: {
-            id: item.products.id,
-            name: item.products.name,
-            description: item.products.description || '',
-            price: Number(item.products.price),
-            image: item.products.image_url,
-            rating: Number(item.products.rating),
-            cookTime: item.products.cook_time,
-            servings: item.products.servings,
-            category: item.products.category,
-            calories: item.products.calories,
-            protein: item.products.protein,
-            fiber: item.products.fiber,
-            water: item.products.water,
-            fat: item.products.fat,
-          },
-          quantity: item.quantity,
-          size: item.size as 'S' | 'M' | 'L' | undefined,
-          cooked: item.cooked,
-        }));
+        const formattedCart: CartItem[] = cartData.map((value: { id: any; quantity: any; size: any; cooked: any; products: any[]; }, index: number) => {
+          const product = value.products[0]; // Assuming that the product is the first element in the products array
+          return {
+            id: value.id,
+            product: {
+              id: product.id,
+              name: product.name,
+              description: product.description || '',
+              price: Number(product.price),
+              image: product.image_url,
+              rating: Number(product.rating),
+              cookTime: product.cook_time,
+              servings: product.servings,
+              category: product.category,
+              calories: product.calories,
+              protein: product.protein,
+              fiber: product.fiber,
+              water: product.water,
+              fat: product.fat,
+            },
+            quantity: value.quantity,
+            size: value.size as 'S' | 'M' | 'L' | undefined,
+            cooked: value.cooked,
+          };
+        });
         setCart(formattedCart);
+      }
+
+      // Load payment methods
+      const { data: paymentData } = await supabase
+        .from('payment_methods')
+        .select('*')
+        .eq('user_id', userId)
+        .order('is_default', { ascending: false });
+
+      if (paymentData) {
+        const formattedPayments: PaymentMethod[] = paymentData.map(pm => ({
+          id: pm.id,
+          type: pm.type as 'cash' | 'visa' | 'mastercard' | 'paypal',
+          cardNumber: pm.card_number,
+          cardHolder: pm.card_holder,
+        }));
+        setPaymentMethods(formattedPayments);
+        if (formattedPayments.length > 0) {
+          setSelectedPaymentMethod(formattedPayments[0]);
+        }
+      }
+
+      // Load favorites
+      const { data: favoritesData } = await supabase
+        .from('favorites')
+        .select('product_id')
+        .eq('user_id', userId);
+
+      if (favoritesData) {
+        setFavorites(favoritesData.map(f => f.product_id));
       }
 
       // Load orders
@@ -226,7 +261,32 @@ export const [AppContext, useApp] = createContextHook(() => {
     setCart([]);
     setAddresses([]);
     setOrders([]);
+    setFavorites([]);
+    setPaymentMethods([]);
   }, []);
+
+  const updateUser = useCallback(async (updates: Partial<User>) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({
+          name: updates.name,
+          phone: updates.phone,
+          bio: updates.bio,
+          avatar_url: updates.avatar,
+        })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      setUser({ ...user, ...updates });
+    } catch (error) {
+      console.error('Error updating user:', error);
+      throw error;
+    }
+  }, [user]);
 
   const addToCart = useCallback(async (item: CartItem) => {
     if (!user) return;
@@ -240,51 +300,57 @@ export const [AppContext, useApp] = createContextHook(() => {
           quantity: item.quantity,
           size: item.size || null,
           cooked: item.cooked || false,
+        }, {
+          onConflict: 'user_id,product_id,size,cooked'
         })
         .select(`
-          *,
+          id,
+          quantity,
+          size,
+          cooked,
           products (*)
         `)
         .single();
 
       if (error) throw error;
 
-      // Reload cart
       await loadUserData(user.id);
     } catch (error) {
       console.error('Error adding to cart:', error);
     }
   }, [user]);
 
-  const updateCartItem = useCallback(async (cartItemId: string, quantity: number) => {
-    if (!user) return;
+  const updateCartItem = useCallback(async (index: number, quantity: number) => {
+    if (!user || !cart[index]) return;
 
     try {
+      const cartItem = cart[index];
+      
       if (quantity <= 0) {
-        await supabase.from('cart').delete().eq('id', cartItemId);
+        await supabase.from('cart').delete().eq('id', cartItem.id);
       } else {
         await supabase
           .from('cart')
           .update({ quantity })
-          .eq('id', cartItemId);
+          .eq('id', cartItem.id);
       }
 
       await loadUserData(user.id);
     } catch (error) {
       console.error('Error updating cart:', error);
     }
-  }, [user]);
+  }, [user, cart]);
 
-  const removeFromCart = useCallback(async (cartItemId: string) => {
-    if (!user) return;
+  const removeFromCart = useCallback(async (index: number) => {
+    if (!user || !cart[index]) return;
 
     try {
-      await supabase.from('cart').delete().eq('id', cartItemId);
+      await supabase.from('cart').delete().eq('id', cart[index].id);
       await loadUserData(user.id);
     } catch (error) {
       console.error('Error removing from cart:', error);
     }
-  }, [user]);
+  }, [user, cart]);
 
   const clearCart = useCallback(async () => {
     if (!user) return;
@@ -320,8 +386,33 @@ export const [AppContext, useApp] = createContextHook(() => {
       await loadUserData(user.id);
     } catch (error) {
       console.error('Error adding address:', error);
+      throw error;
     }
   }, [user, addresses]);
+
+  const updateAddress = useCallback(async (id: string, updates: Partial<Address>) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('addresses')
+        .update({
+          label: updates.label,
+          full_address: updates.fullAddress,
+          street: updates.street,
+          post_code: updates.postCode,
+          apartment: updates.apartment,
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      await loadUserData(user.id);
+    } catch (error) {
+      console.error('Error updating address:', error);
+      throw error;
+    }
+  }, [user]);
 
   const deleteAddress = useCallback(async (id: string) => {
     if (!user) return;
@@ -333,6 +424,69 @@ export const [AppContext, useApp] = createContextHook(() => {
       console.error('Error deleting address:', error);
     }
   }, [user]);
+
+  const addPaymentMethod = useCallback(async (method: Omit<PaymentMethod, 'id'>) => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('payment_methods')
+        .insert({
+          user_id: user.id,
+          type: method.type,
+          card_number: method.cardNumber,
+          card_holder: method.cardHolder,
+          is_default: paymentMethods.length === 0,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      await loadUserData(user.id);
+    } catch (error) {
+      console.error('Error adding payment method:', error);
+      throw error;
+    }
+  }, [user, paymentMethods]);
+
+  const deletePaymentMethod = useCallback(async (id: string) => {
+    if (!user) return;
+
+    try {
+      await supabase.from('payment_methods').delete().eq('id', id);
+      await loadUserData(user.id);
+    } catch (error) {
+      console.error('Error deleting payment method:', error);
+    }
+  }, [user]);
+
+  const toggleFavorite = useCallback(async (productId: string) => {
+    if (!user) return;
+
+    try {
+      const isFavorite = favorites.includes(productId);
+
+      if (isFavorite) {
+        await supabase
+          .from('favorites')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('product_id', productId);
+        setFavorites(favorites.filter(id => id !== productId));
+      } else {
+        await supabase
+          .from('favorites')
+          .insert({
+            user_id: user.id,
+            product_id: productId,
+          });
+        setFavorites([...favorites, productId]);
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+    }
+  }, [user, favorites]);
 
   const cartTotal = useMemo(
     () => cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0),
@@ -350,6 +504,7 @@ export const [AppContext, useApp] = createContextHook(() => {
       paymentMethods,
       selectedPaymentMethod,
       orders,
+      favorites,
       cartTotal,
       loading,
       completeOnboarding,
@@ -357,14 +512,19 @@ export const [AppContext, useApp] = createContextHook(() => {
       signup,
       logout,
       setUser,
+      updateUser,
       addToCart,
       updateCartItem,
       removeFromCart,
       clearCart,
       addAddress,
+      updateAddress,
       deleteAddress,
       setSelectedAddress,
+      addPaymentMethod,
+      deletePaymentMethod,
       setSelectedPaymentMethod,
+      toggleFavorite,
     }),
     [
       isAuthenticated,
@@ -376,18 +536,24 @@ export const [AppContext, useApp] = createContextHook(() => {
       paymentMethods,
       selectedPaymentMethod,
       orders,
+      favorites,
       cartTotal,
       loading,
       completeOnboarding,
       login,
       signup,
       logout,
+      updateUser,
       addToCart,
       updateCartItem,
       removeFromCart,
       clearCart,
       addAddress,
+      updateAddress,
       deleteAddress,
+      addPaymentMethod,
+      deletePaymentMethod,
+      toggleFavorite,
     ]
   );
 });

@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,18 +18,39 @@ import colors from '@/constants/colors';
 export default function PersonalInfo() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user, setUser } = useApp();
+  const { user, updateUser } = useApp();
 
-  const [name, setName] = useState(user?.name || '');
-  const [email, setEmail] = useState(user?.email || '');
-  const [phone, setPhone] = useState(user?.phone || '');
-  const [bio, setBio] = useState(user?.bio || '');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [bio, setBio] = useState('');
 
-  const handleSave = () => {
+  // Initialize form with user data
+  useEffect(() => {
     if (user) {
-      setUser({ ...user, name, email, phone, bio });
-      Alert.alert('Success', 'Profile updated successfully!');
-      router.back();
+      setName(user.name || '');
+      setEmail(user.email || '');
+      setPhone(user.phone || '');
+      setBio(user.bio || '');
+    }
+  }, [user]);
+
+  const handleSave = async () => {
+    if (!name.trim()) {
+      Alert.alert('Validation Error', 'Name is required');
+      return;
+    }
+
+    try {
+      await updateUser({ name, email, phone, bio });
+      Alert.alert('Success', 'Profile updated successfully!', [
+        {
+          text: 'OK',
+          onPress: () => router.back(),
+        },
+      ]);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update profile');
     }
   };
 
@@ -77,14 +98,15 @@ export default function PersonalInfo() {
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Email</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, styles.disabledInput]}
               value={email}
-              onChangeText={setEmail}
+              editable={false}
               placeholder="Enter your email"
               placeholderTextColor={colors.textLight}
               keyboardType="email-address"
               autoCapitalize="none"
             />
+            <Text style={styles.helperText}>Email cannot be changed</Text>
           </View>
 
           <View style={styles.inputGroup}>
@@ -203,6 +225,14 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 16,
     color: colors.textDark,
+  },
+  disabledInput: {
+    opacity: 0.6,
+  },
+  helperText: {
+    fontSize: 12,
+    color: colors.textLight,
+    marginTop: 4,
   },
   textArea: {
     height: 100,
