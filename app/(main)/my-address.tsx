@@ -6,9 +6,10 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Home, Briefcase, Edit2, Trash2 } from 'lucide-react-native';
+import { ChevronLeft, Home, Briefcase, Edit2, Trash2, MapPin } from 'lucide-react-native';
 import colors from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
 
@@ -24,8 +25,40 @@ export default function MyAddress() {
       case 'School':
         return <Briefcase size={24} color={colors.purple} />;
       default:
-        return <Home size={24} color={colors.textLight} />;
+        return <MapPin size={24} color={colors.textLight} />;
     }
+  };
+
+  const handleDelete = (id: string, label: string) => {
+    Alert.alert(
+      'Delete Address',
+      `Are you sure you want to delete this ${label} address?`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteAddress(id);
+              Alert.alert('Success', 'Address deleted successfully');
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete address');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleEdit = (id: string) => {
+    router.push({
+      pathname: '/add-address',
+      params: { id }
+    } as never);
   };
 
   return (
@@ -51,17 +84,21 @@ export default function MyAddress() {
             <View style={styles.addressInfo}>
               <Text style={styles.addressLabel}>{address.label.toUpperCase()}</Text>
               <Text style={styles.addressText}>{address.fullAddress}</Text>
+              <Text style={styles.addressDetails}>
+                {address.street}, {address.postCode}
+                {address.apartment ? `, Apt ${address.apartment}` : ''}
+              </Text>
             </View>
             <View style={styles.actions}>
               <TouchableOpacity
                 style={styles.actionButton}
-                onPress={() => router.push('/add-address' as never)}
+                onPress={() => handleEdit(address.id)}
               >
                 <Edit2 size={18} color={colors.primary} />
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.actionButton}
-                onPress={() => deleteAddress(address.id)}
+                onPress={() => handleDelete(address.id, address.label)}
               >
                 <Trash2 size={18} color={colors.primary} />
               </TouchableOpacity>
@@ -71,7 +108,9 @@ export default function MyAddress() {
 
         {addresses.length === 0 && (
           <View style={styles.emptyContainer}>
+            <MapPin size={64} color={colors.lightGray} />
             <Text style={styles.emptyText}>No addresses saved</Text>
+            <Text style={styles.emptySubtext}>Add your first delivery address</Text>
           </View>
         )}
       </ScrollView>
@@ -146,8 +185,14 @@ const styles = StyleSheet.create({
   },
   addressText: {
     fontSize: 14,
+    color: colors.textDark,
+    marginBottom: 2,
+    fontWeight: '600' as const,
+  },
+  addressDetails: {
+    fontSize: 12,
     color: colors.textLight,
-    lineHeight: 20,
+    lineHeight: 18,
   },
   actions: {
     flexDirection: 'row',
@@ -165,11 +210,18 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 60,
+    paddingTop: 100,
   },
   emptyText: {
+    fontSize: 18,
+    fontWeight: '600' as const,
+    color: colors.textDark,
+    marginTop: 16,
+  },
+  emptySubtext: {
     fontSize: 14,
     color: colors.textLight,
+    marginTop: 8,
   },
   footer: {
     paddingHorizontal: 20,

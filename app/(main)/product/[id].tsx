@@ -6,33 +6,33 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Heart, Star, Clock, TrendingUp, Utensils } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import { useApp } from '@/contexts/AppContext';
-import { products } from '@/mocks/data';
+import { useProduct } from '@/hooks/useProducts';
 import colors from '@/constants/colors';
 
 export default function ProductDetail() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams();
-  const { addToCart } = useApp();
+  const { addToCart, toggleFavorite, favorites } = useApp();
+  
+  const { data: product, isLoading, error } = useProduct(id as string);
 
-  const product = products.find((p) => p.id === id);
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState<'S' | 'M' | 'L'>('M');
   const [isCooked, setIsCooked] = useState(false);
   const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
   const [showSuccess, setShowSuccess] = useState(false);
 
-  if (!product) {
-    return null;
-  }
+  const isFavorite = product ? favorites.includes(product.id) : false;
 
   // Default ingredients if none exist
-  const ingredients = product.ingredients || [
+  const ingredients = product?.ingredients || [
     { name: '🍅 Tomato', cooked: false, calories: 20, protein: 1, fiber: 1, water: 95, fat: 0 },
     { name: '🧅 Onion', cooked: false, calories: 40, protein: 1, fiber: 2, water: 89, fat: 0 },
     { name: '🌶️ Pepper', cooked: false, calories: 30, protein: 1, fiber: 2, water: 92, fat: 0 },
@@ -43,8 +43,9 @@ export default function ProductDetail() {
   const cookingPrice = isCooked ? 2 : 0;
 
   const totalPrice = useMemo(() => {
+    if (!product) return 0;
     return (product.price * sizeMultiplier + cookingPrice) * quantity;
-  }, [product.price, sizeMultiplier, cookingPrice, quantity]);
+  }, [product, sizeMultiplier, cookingPrice, quantity]);
 
   const toggleIngredient = (ingredientName: string) => {
     const newSelected = new Set(selectedIngredients);
@@ -57,6 +58,8 @@ export default function ProductDetail() {
   };
 
   const handleAddToCart = async () => {
+    if (!product) return;
+    
     await addToCart({
       product,
       quantity,
@@ -74,6 +77,35 @@ export default function ProductDetail() {
     }, 500);
   };
 
+  const handleToggleFavorite = () => {
+    if (product) {
+      toggleFavorite(product.id);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer, { paddingTop: insets.top }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading product...</Text>
+      </View>
+    );
+  }
+
+  if (error || !product) {
+    return (
+      <View style={[styles.container, styles.errorContainer, { paddingTop: insets.top }]}>
+        <Text style={styles.errorText}>Failed to load product</Text>
+        <TouchableOpacity 
+          style={styles.retryButton}
+          onPress={() => router.back()}
+        >
+          <Text style={styles.retryButtonText}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.imageContainer}>
@@ -83,8 +115,12 @@ export default function ProductDetail() {
           <ChevronLeft size={24} color={colors.textDark} />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.favoriteButton}>
-          <Heart size={24} color={colors.primary} />
+        <TouchableOpacity style={styles.favoriteButton} onPress={handleToggleFavorite}>
+          <Heart 
+            size={24} 
+            color={isFavorite ? colors.red : colors.textDark} 
+            fill={isFavorite ? colors.red : 'transparent'}
+          />
         </TouchableOpacity>
       </View>
 
@@ -234,6 +270,37 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.white,
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: colors.textLight,
+  },
+  errorContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  errorText: {
+    fontSize: 16,
+    color: colors.error,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    color: colors.white,
+    fontSize: 16,
+    fontWeight: '700' as const,
   },
   imageContainer: {
     width: '100%',

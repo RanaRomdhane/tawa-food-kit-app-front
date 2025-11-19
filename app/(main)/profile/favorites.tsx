@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Heart, Star } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import colors from '@/constants/colors';
-import { products } from '@/mocks/data';
+import { useProducts } from '@/hooks/useProducts';
+import { useApp } from '@/contexts/AppContext';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 60) / 2;
@@ -20,10 +21,20 @@ const CARD_WIDTH = (width - 60) / 2;
 export default function Favorites() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [favorites, setFavorites] = useState(products.slice(0, 6));
+  const { data: products } = useProducts();
+  const { favorites, toggleFavorite, addToCart } = useApp();
 
-  const toggleFavorite = (productId: string) => {
-    setFavorites((prev) => prev.filter((p) => p.id !== productId));
+  const favoriteProducts = products?.filter(p => favorites.includes(p.id)) || [];
+
+  const handleToggleFavorite = async (productId: string) => {
+    await toggleFavorite(productId);
+  };
+
+  const handleAddToCart = async (product: any) => {
+    await addToCart({
+      product,
+      quantity: 1,
+    });
   };
 
   return (
@@ -41,9 +52,9 @@ export default function Favorites() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
         showsVerticalScrollIndicator={false}
       >
-        {favorites.length > 0 ? (
+        {favoriteProducts.length > 0 ? (
           <View style={styles.grid}>
-            {favorites.map((product) => (
+            {favoriteProducts.map((product) => (
               <TouchableOpacity
                 key={product.id}
                 style={styles.card}
@@ -57,7 +68,7 @@ export default function Favorites() {
                   />
                   <TouchableOpacity
                     style={styles.favoriteButton}
-                    onPress={() => toggleFavorite(product.id)}
+                    onPress={() => handleToggleFavorite(product.id)}
                   >
                     <Heart size={18} color={colors.red} fill={colors.red} />
                   </TouchableOpacity>
@@ -72,7 +83,10 @@ export default function Favorites() {
                   </View>
                   <View style={styles.priceRow}>
                     <Text style={styles.price}>{product.price} DT</Text>
-                    <TouchableOpacity style={styles.addButton}>
+                    <TouchableOpacity 
+                      style={styles.addButton}
+                      onPress={() => handleAddToCart(product)}
+                    >
                       <Text style={styles.addButtonText}>+</Text>
                     </TouchableOpacity>
                   </View>
@@ -87,6 +101,12 @@ export default function Favorites() {
             <Text style={styles.emptySubtitle}>
               Start adding your favorite items by tapping the heart icon!
             </Text>
+            <TouchableOpacity 
+              style={styles.browseButton}
+              onPress={() => router.push('/search' as never)}
+            >
+              <Text style={styles.browseButtonText}>Browse Products</Text>
+            </TouchableOpacity>
           </View>
         )}
       </ScrollView>
@@ -229,5 +249,17 @@ const styles = StyleSheet.create({
     color: colors.textLight,
     textAlign: 'center',
     lineHeight: 20,
+    marginBottom: 24,
+  },
+  browseButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  browseButtonText: {
+    color: colors.white,
+    fontSize: 16,
+    fontWeight: '700' as const,
   },
 });

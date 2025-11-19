@@ -6,9 +6,10 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, X } from 'lucide-react-native';
+import { ChevronLeft, X, MapPin } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
@@ -17,6 +18,40 @@ export default function Cart() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { cart, updateCartItem, removeFromCart, cartTotal, selectedAddress } = useApp();
+
+  const handleUpdateQuantity = async (index: number, newQuantity: number) => {
+    if (newQuantity < 1) {
+      Alert.alert(
+        'Remove Item',
+        'Do you want to remove this item from cart?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Remove',
+            style: 'destructive',
+            onPress: () => removeFromCart(index),
+          },
+        ]
+      );
+      return;
+    }
+    await updateCartItem(index, newQuantity);
+  };
+
+  const handleRemove = (index: number) => {
+    Alert.alert(
+      'Remove Item',
+      'Are you sure you want to remove this item from cart?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => removeFromCart(index),
+        },
+      ]
+    );
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -42,21 +77,22 @@ export default function Cart() {
             />
 
             <View style={styles.itemDetails}>
-              <Text style={styles.itemName}>{item.product.name}</Text>
+              <Text style={styles.itemName} numberOfLines={2}>{item.product.name}</Text>
               <Text style={styles.itemPrice}>{item.product.price} DT</Text>
               {item.size && <Text style={styles.itemMeta}>Size: {item.size}</Text>}
+              {item.cooked && <Text style={styles.itemMeta}>Cooked (+2 DT)</Text>}
 
               <View style={styles.quantityControls}>
                 <TouchableOpacity
                   style={styles.quantityButton}
-                  onPress={() => updateCartItem(index, item.quantity - 1)}
+                  onPress={() => handleUpdateQuantity(index, item.quantity - 1)}
                 >
                   <Text style={styles.quantityButtonText}>−</Text>
                 </TouchableOpacity>
                 <Text style={styles.quantityText}>{item.quantity}</Text>
                 <TouchableOpacity
                   style={styles.quantityButton}
-                  onPress={() => updateCartItem(index, item.quantity + 1)}
+                  onPress={() => handleUpdateQuantity(index, item.quantity + 1)}
                 >
                   <Text style={styles.quantityButtonText}>+</Text>
                 </TouchableOpacity>
@@ -65,7 +101,7 @@ export default function Cart() {
 
             <TouchableOpacity
               style={styles.removeButton}
-              onPress={() => removeFromCart(index)}
+              onPress={() => handleRemove(index)}
             >
               <X size={20} color={colors.white} />
             </TouchableOpacity>
@@ -74,7 +110,15 @@ export default function Cart() {
 
         {cart.length === 0 && (
           <View style={styles.emptyCart}>
+            <Text style={styles.emptyIcon}>🛒</Text>
             <Text style={styles.emptyText}>Your cart is empty</Text>
+            <Text style={styles.emptySubtext}>Add some delicious meal kits!</Text>
+            <TouchableOpacity 
+              style={styles.browseButton}
+              onPress={() => router.push('/search' as never)}
+            >
+              <Text style={styles.browseButtonText}>Browse Products</Text>
+            </TouchableOpacity>
           </View>
         )}
       </ScrollView>
@@ -82,10 +126,15 @@ export default function Cart() {
       {cart.length > 0 && (
         <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
           <View style={styles.addressSection}>
-            <Text style={styles.addressLabel}>DELIVERY ADDRESS</Text>
+            <View style={styles.addressHeader}>
+              <MapPin size={16} color={colors.primary} />
+              <Text style={styles.addressLabel}>DELIVERY ADDRESS</Text>
+            </View>
             <View style={styles.addressRow}>
-              <Text style={styles.addressText}>{selectedAddress?.fullAddress || 'Borj Baccouche, Ariana'}</Text>
-              <TouchableOpacity>
+              <Text style={styles.addressText} numberOfLines={2}>
+                {selectedAddress?.fullAddress || 'Borj Baccouche, Ariana'}
+              </Text>
+              <TouchableOpacity onPress={() => router.push('/my-address' as never)}>
                 <Text style={styles.editText}>EDIT</Text>
               </TouchableOpacity>
             </View>
@@ -93,12 +142,18 @@ export default function Cart() {
 
           <View style={styles.totalSection}>
             <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>TOTAL:</Text>
-              <Text style={styles.totalValue}>{cartTotal} DT</Text>
+              <Text style={styles.totalLabel}>Subtotal:</Text>
+              <Text style={styles.totalValue}>{cartTotal.toFixed(2)} DT</Text>
             </View>
-            <TouchableOpacity>
-              <Text style={styles.breakdownLink}>Breakdown &gt;</Text>
-            </TouchableOpacity>
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>Delivery:</Text>
+              <Text style={styles.totalValue}>2.00 DT</Text>
+            </View>
+            <View style={styles.divider} />
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabelBold}>TOTAL:</Text>
+              <Text style={styles.totalValueBold}>{(cartTotal + 2).toFixed(2)} DT</Text>
+            </View>
           </View>
 
           <TouchableOpacity
@@ -174,6 +229,7 @@ const styles = StyleSheet.create({
   itemMeta: {
     fontSize: 12,
     color: colors.mediumGray,
+    marginTop: 2,
   },
   quantityControls: {
     flexDirection: 'row',
@@ -184,6 +240,7 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 12,
     paddingVertical: 6,
+    marginTop: 8,
   },
   quantityButton: {
     width: 20,
@@ -215,11 +272,33 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 60,
+    paddingVertical: 100,
+  },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: 16,
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: 20,
+    fontWeight: '600' as const,
+    color: colors.white,
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
     color: colors.mediumGray,
+    marginBottom: 24,
+  },
+  browseButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  browseButtonText: {
+    color: colors.white,
+    fontSize: 16,
+    fontWeight: '700' as const,
   },
   footer: {
     backgroundColor: colors.white,
@@ -231,11 +310,16 @@ const styles = StyleSheet.create({
   addressSection: {
     marginBottom: 20,
   },
+  addressHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
   addressLabel: {
     fontSize: 12,
     fontWeight: '600' as const,
     color: colors.textLight,
-    marginBottom: 8,
     letterSpacing: 0.5,
   },
   addressRow: {
@@ -250,12 +334,12 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     color: colors.textDark,
+    marginRight: 12,
   },
   editText: {
     fontSize: 14,
     color: colors.primary,
     fontWeight: '700' as const,
-    marginLeft: 12,
   },
   totalSection: {
     marginBottom: 20,
@@ -267,20 +351,29 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   totalLabel: {
+    fontSize: 14,
+    color: colors.textLight,
+  },
+  totalValue: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: colors.textDark,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.lightGray,
+    marginVertical: 8,
+  },
+  totalLabelBold: {
     fontSize: 12,
     fontWeight: '600' as const,
     color: colors.textLight,
     letterSpacing: 0.5,
   },
-  totalValue: {
+  totalValueBold: {
     fontSize: 24,
     fontWeight: '700' as const,
     color: colors.textDark,
-  },
-  breakdownLink: {
-    fontSize: 14,
-    color: colors.primary,
-    textAlign: 'right',
   },
   placeOrderButton: {
     backgroundColor: colors.primary,

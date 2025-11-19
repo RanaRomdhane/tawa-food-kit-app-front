@@ -52,6 +52,8 @@ export const useProduct = (id: string) => {
   return useQuery({
     queryKey: ['product', id],
     queryFn: async () => {
+      if (!id) throw new Error('Product ID is required');
+
       const { data, error } = await supabase
         .from('products')
         .select(`
@@ -61,7 +63,14 @@ export const useProduct = (id: string) => {
         .eq('id', id)
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching product:', error);
+        throw error;
+      }
+
+      if (!data) {
+        throw new Error('Product not found');
+      }
 
       const product: Product = {
         id: data.id,
@@ -92,6 +101,8 @@ export const useProduct = (id: string) => {
       return product;
     },
     enabled: !!id,
+    retry: 2,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 };
 

@@ -7,14 +7,17 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
 import colors from '@/constants/colors';
+import { useApp } from '@/contexts/AppContext';
 
 export default function AddCard() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { addPaymentMethod } = useApp();
 
   const [cardNumber, setCardNumber] = useState('');
   const [cardHolder, setCardHolder] = useState('');
@@ -49,8 +52,49 @@ export default function AddCard() {
     }
   };
 
-  const handleSave = () => {
-    router.back();
+  const validateCard = () => {
+    if (!cardNumber || cardNumber.replace(/\s/g, '').length < 16) {
+      Alert.alert('Validation Error', 'Please enter a valid 16-digit card number');
+      return false;
+    }
+    if (!cardHolder.trim()) {
+      Alert.alert('Validation Error', 'Please enter the card holder name');
+      return false;
+    }
+    if (!expiryDate || expiryDate.length < 5) {
+      Alert.alert('Validation Error', 'Please enter a valid expiry date (MM/YY)');
+      return false;
+    }
+    if (!cvv || cvv.length < 3) {
+      Alert.alert('Validation Error', 'Please enter a valid CVV');
+      return false;
+    }
+    if (!cardType) {
+      Alert.alert('Validation Error', 'Card type not recognized. Please use Visa or Mastercard');
+      return false;
+    }
+    return true;
+  };
+
+  const handleSave = async () => {
+    if (!validateCard()) return;
+
+    try {
+      await addPaymentMethod({
+        type: cardType!,
+        cardNumber: cardNumber.replace(/\s/g, '').slice(-4), // Store only last 4 digits
+        cardHolder: cardHolder,
+        expiryDate: expiryDate,
+      });
+      Alert.alert('Success', 'Card added successfully!', [
+        {
+          text: 'OK',
+          onPress: () => router.back(),
+        },
+      ]);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to add card');
+    }
   };
 
   return (
@@ -121,7 +165,7 @@ export default function AddCard() {
           </View>
 
           <View style={styles.row}>
-            <View style={[styles.inputGroup, { flex: 1 }]}>
+            <View style={[styles.inputGroup, { flex: 1, marginRight: 12 }]}>
               <Text style={styles.label}>Expiry Date</Text>
               <TextInput
                 style={styles.input}
@@ -264,7 +308,6 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    gap: 16,
   },
   footer: {
     position: 'absolute',
