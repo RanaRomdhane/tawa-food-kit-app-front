@@ -274,6 +274,33 @@ export const [AppContext, useApp] = createContextHook(() => {
     initializeApp();
   }, []);
 
+  // Add this function to contexts/AppContext.tsx in the hook
+
+  const cancelOrder = useCallback(async (orderId: string) => {
+    if (!user) {
+      console.error('No user found');
+      throw new Error('User must be logged in');
+    }
+  
+    try {
+      console.log('🚫 CANCEL ORDER - Canceling order:', orderId);
+  
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: 'canceled' })
+        .eq('order_number', orderId)
+        .eq('user_id', user.id);
+  
+      if (error) throw error;
+  
+      console.log('🚫 CANCEL ORDER - Order canceled successfully');
+      await loadUserData(user.id);
+    } catch (error) {
+      console.error('Error in cancelOrder:', error);
+      throw error;
+    }
+  }, [user, loadUserData]);
+
   const initializeApp = async () => {
     try {
       setError(null);
@@ -497,18 +524,20 @@ export const [AppContext, useApp] = createContextHook(() => {
     }
   }, [user]);
 
+  // contexts/AppContext.tsx - FIXED createOrder function
+
   const createOrder = useCallback(async () => {
     if (!user || cart.length === 0) {
       console.error('Cannot create order: No user or empty cart');
       throw new Error('Cannot create order with empty cart');
     }
-  
+
     try {
       const cartTotal = cart.reduce((total, item) => total + (item.product.price * item.quantity), 0);
       const orderNumber = `ORD-${Date.now()}`;
       const total = cartTotal + 2; // Including delivery fee
-  
-      // Create order
+
+      // Create order with 'ongoing' status instead of 'pending'
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .insert({
@@ -516,16 +545,18 @@ export const [AppContext, useApp] = createContextHook(() => {
           order_number: orderNumber,
           total: total,
           delivery_fee: 2.00,
-          status: 'pending',
+          status: 'ongoing', // FIXED: Changed from 'pending' to 'ongoing'
           address_id: selectedAddress?.id || null,
           payment_method_id: selectedPaymentMethod?.id || null,
+          courier_name: 'Ahmed Fadhel', // FIXED: Add default courier
+          courier_avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200', // FIXED: Add default avatar
         })
         .select()
         .single();
-  
+
       if (orderError) throw orderError;
-  
-      // Create order items
+
+      // Create order items with proper structure
       const orderItems = cart.map(item => ({
         order_id: orderData.id,
         product_id: item.product.id,
@@ -534,25 +565,25 @@ export const [AppContext, useApp] = createContextHook(() => {
         cooked: item.cooked || false,
         price: item.product.price,
       }));
-  
+
       const { error: itemsError } = await supabase
         .from('order_items')
         .insert(orderItems);
-  
+
       if (itemsError) throw itemsError;
-  
+
       // Clear cart
       await clearCart();
-  
-      // Reload orders
+
+      // Reload user data to get updated orders
       await loadUserData(user.id);
-  
+
       return orderNumber;
     } catch (error) {
       console.error('Error creating order:', error);
       throw error;
     }
-  }, [user, cart, selectedAddress, selectedPaymentMethod]);
+  }, [user, cart, selectedAddress, selectedPaymentMethod, clearCart]);
 
   const addAddress = useCallback(async (address: Omit<Address, 'id'>) => {
     if (!user) return;
@@ -712,6 +743,7 @@ export const [AppContext, useApp] = createContextHook(() => {
       removeFromCart,
       clearCart,
       createOrder,
+      cancelOrder,
       addAddress,
       updateAddress,
       deleteAddress,
@@ -747,6 +779,7 @@ export const [AppContext, useApp] = createContextHook(() => {
       removeFromCart,
       clearCart,
       createOrder,
+      cancelOrder,
       addAddress,
       updateAddress,
       deleteAddress,

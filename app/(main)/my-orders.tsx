@@ -21,7 +21,7 @@ type Tab = 'ongoing' | 'history';
 export default function MyOrders() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { orders, addToCart } = useApp();
+  const { orders, addToCart, cancelOrder } = useApp();
   const [activeTab, setActiveTab] = useState<Tab>('ongoing');
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
@@ -33,13 +33,16 @@ export default function MyOrders() {
 
   const displayOrders = activeTab === 'ongoing' ? ongoingOrders : historyOrders;
 
+  // FIXED: Add safety checks for items
   const foodOrders = displayOrders.filter((order) => 
-    order.items.some((item) => item.product.category !== 'Drink')
+    order.items?.some((item) => item?.product?.category !== 'Drink')
   );
 
   const drinkOrders = displayOrders.filter((order) =>
-    order.items.every((item) => item.product.category === 'Drink')
+    order.items?.every((item) => item?.product?.category === 'Drink')
   );
+
+  // In app/(main)/my-orders.tsx - Replace the handleCancelOrder function
 
   const handleCancelOrder = (orderId: string) => {
     Alert.alert(
@@ -53,8 +56,31 @@ export default function MyOrders() {
         {
           text: 'Yes, Cancel',
           style: 'destructive',
-          onPress: () => {
-            Alert.alert('Order Cancelled', 'Your order has been cancelled successfully.');
+          onPress: async () => {
+            try {
+              // Call the cancelOrder function from context
+              await cancelOrder(orderId);
+              
+              Alert.alert(
+                'Success',
+                'Your order has been cancelled successfully.',
+                [
+                  {
+                    text: 'OK',
+                    onPress: () => {
+                      // The order should now be removed from the list
+                      // since loadUserData was called
+                    },
+                  },
+                ]
+              );
+            } catch (error) {
+              Alert.alert(
+                'Error',
+                'Failed to cancel order. Please try again.',
+                [{ text: 'OK' }]
+              );
+            }
           },
         },
       ]
@@ -92,23 +118,43 @@ export default function MyOrders() {
   };
 
   const handleReorder = async (order: typeof orders[0]) => {
-    for (const item of order.items) {
-      await addToCart(item);
+    try {
+      // FIXED: Add safety check for items
+      if (!order.items || order.items.length === 0) {
+        Alert.alert('Error', 'This order has no items to reorder.');
+        return;
+      }
+
+      for (const item of order.items) {
+        // FIXED: Skip items that are undefined or missing product info
+        if (item && item.product) {
+          await addToCart(item);
+        }
+      }
+      
+      Alert.alert(
+        'Added to Cart',
+        'All items from this order have been added to your cart.',
+        [
+          {
+            text: 'View Cart',
+            onPress: () => router.push('/cart' as never),
+          },
+          {
+            text: 'OK',
+            style: 'cancel',
+          },
+        ]
+      );
+    } catch (error) {
+      Alert.alert('Error', 'Failed to add items to cart.');
     }
-    Alert.alert(
-      'Added to Cart',
-      'All items from this order have been added to your cart.',
-      [
-        {
-          text: 'View Cart',
-          onPress: () => router.push('/cart' as never),
-        },
-        {
-          text: 'OK',
-          style: 'cancel',
-        },
-      ]
-    );
+  };
+
+  const getItemCount = (order: typeof orders[0]) => {
+    // FIXED: Add safety check for items
+    if (!order.items) return 0;
+    return order.items.reduce((sum, item) => sum + (item?.quantity || 0), 0);
   };
 
   return (
@@ -148,148 +194,156 @@ export default function MyOrders() {
         {foodOrders.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Food</Text>
-            {foodOrders.map((order) => (
-              <View key={order.id} style={styles.orderCard}>
-                <View style={styles.orderHeader}>
-                  <Image
-                    source={{ uri: order.items[0].product.image }}
-                    style={styles.orderImage}
-                    contentFit="cover"
-                  />
-                  <View style={styles.orderInfo}>
-                    <Text style={styles.orderName}>{order.items[0].product.name}</Text>
-                    <View style={styles.orderDetails}>
-                      <Text style={styles.orderPrice}>{order.total} DT</Text>
-                      <Text style={styles.orderSeparator}>•</Text>
-                      <Text style={styles.orderItems}>
-                        {order.items.reduce((sum, item) => sum + item.quantity, 0)}{' '}
-                        {order.items.reduce((sum, item) => sum + item.quantity, 0) === 1
-                          ? 'Item'
-                          : 'Items'}
-                      </Text>
+            {foodOrders.map((order) => {
+              // FIXED: Get first valid item
+              const firstItem = order.items?.find(item => item?.product);
+              
+              if (!firstItem) return null;
+
+              return (
+                <View key={order.id} style={styles.orderCard}>
+                  <View style={styles.orderHeader}>
+                    <Image
+                      source={{ uri: firstItem.product?.image || 'https://via.placeholder.com/64' }}
+                      style={styles.orderImage}
+                      contentFit="cover"
+                    />
+                    <View style={styles.orderInfo}>
+                      <Text style={styles.orderName}>{firstItem.product?.name}</Text>
+                      <View style={styles.orderDetails}>
+                        <Text style={styles.orderPrice}>{order.total} DT</Text>
+                        <Text style={styles.orderSeparator}>•</Text>
+                        <Text style={styles.orderItems}>
+                          {getItemCount(order)} {getItemCount(order) === 1 ? 'Item' : 'Items'}
+                        </Text>
+                      </View>
+                      {activeTab === 'history' && (
+                        <Text style={styles.orderNumber}>#{order.id}</Text>
+                      )}
                     </View>
                     {activeTab === 'history' && (
-                      <Text style={styles.orderNumber}>#{order.id}</Text>
+                      <Text
+                        style={[
+                          styles.orderStatus,
+                          order.status === 'completed' && styles.statusCompleted,
+                          order.status === 'canceled' && styles.statusCanceled,
+                        ]}
+                      >
+                        {order.status === 'completed' ? 'Completed' : 'Canceled'}
+                      </Text>
                     )}
                   </View>
+
                   {activeTab === 'history' && (
-                    <Text
-                      style={[
-                        styles.orderStatus,
-                        order.status === 'completed' && styles.statusCompleted,
-                        order.status === 'canceled' && styles.statusCanceled,
-                      ]}
-                    >
-                      {order.status === 'completed' ? 'Completed' : 'Canceled'}
-                    </Text>
+                    <View style={styles.orderMeta}>
+                      <Text style={styles.orderDate}>{order.date}</Text>
+                    </View>
                   )}
-                </View>
 
-                {activeTab === 'history' && (
-                  <View style={styles.orderMeta}>
-                    <Text style={styles.orderDate}>{order.date}</Text>
+                  <View style={styles.orderActions}>
+                    {activeTab === 'ongoing' ? (
+                      <>
+                        <TouchableOpacity
+                          style={styles.trackButton}
+                          onPress={() => router.push('/track-order' as never)}
+                        >
+                          <Text style={styles.trackButtonText}>Track Order</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={styles.cancelButton}
+                          onPress={() => handleCancelOrder(order.id)}
+                        >
+                          <Text style={styles.cancelButtonText}>Cancel</Text>
+                        </TouchableOpacity>
+                      </>
+                    ) : (
+                      <>
+                        <TouchableOpacity 
+                          style={styles.rateButton}
+                          onPress={() => handleRateOrder(order.id)}
+                        >
+                          <Text style={styles.rateButtonText}>Rate</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={styles.reorderButton}
+                          onPress={() => handleReorder(order)}
+                        >
+                          <Text style={styles.reorderButtonText}>Re-Order</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
                   </View>
-                )}
-
-                <View style={styles.orderActions}>
-                  {activeTab === 'ongoing' ? (
-                    <>
-                      <TouchableOpacity
-                        style={styles.trackButton}
-                        onPress={() => router.push('/track-order' as never)}
-                      >
-                        <Text style={styles.trackButtonText}>Track Order</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={styles.cancelButton}
-                        onPress={() => handleCancelOrder(order.id)}
-                      >
-                        <Text style={styles.cancelButtonText}>Cancel</Text>
-                      </TouchableOpacity>
-                    </>
-                  ) : (
-                    <>
-                      <TouchableOpacity 
-                        style={styles.rateButton}
-                        onPress={() => handleRateOrder(order.id)}
-                      >
-                        <Text style={styles.rateButtonText}>Rate</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={styles.reorderButton}
-                        onPress={() => handleReorder(order)}
-                      >
-                        <Text style={styles.reorderButtonText}>Re-Order</Text>
-                      </TouchableOpacity>
-                    </>
-                  )}
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
 
         {drinkOrders.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Drink</Text>
-            {drinkOrders.map((order) => (
-              <View key={order.id} style={styles.orderCard}>
-                <View style={styles.orderHeader}>
-                  <Image
-                    source={{ uri: order.items[0].product.image }}
-                    style={styles.orderImage}
-                    contentFit="cover"
-                  />
-                  <View style={styles.orderInfo}>
-                    <Text style={styles.orderName}>{order.items[0].product.name}</Text>
-                    <View style={styles.orderDetails}>
-                      <Text style={styles.orderPrice}>{order.total} DT</Text>
-                      <Text style={styles.orderSeparator}>•</Text>
-                      <Text style={styles.orderItems}>
-                        {order.items.reduce((sum, item) => sum + item.quantity, 0)}{' '}
-                        {order.items.reduce((sum, item) => sum + item.quantity, 0) === 1
-                          ? 'Item'
-                          : 'Items'}
-                      </Text>
+            {drinkOrders.map((order) => {
+              // FIXED: Get first valid item
+              const firstItem = order.items?.find(item => item?.product);
+              
+              if (!firstItem) return null;
+
+              return (
+                <View key={order.id} style={styles.orderCard}>
+                  <View style={styles.orderHeader}>
+                    <Image
+                      source={{ uri: firstItem.product?.image || 'https://via.placeholder.com/64' }}
+                      style={styles.orderImage}
+                      contentFit="cover"
+                    />
+                    <View style={styles.orderInfo}>
+                      <Text style={styles.orderName}>{firstItem.product?.name}</Text>
+                      <View style={styles.orderDetails}>
+                        <Text style={styles.orderPrice}>{order.total} DT</Text>
+                        <Text style={styles.orderSeparator}>•</Text>
+                        <Text style={styles.orderItems}>
+                          {getItemCount(order)} {getItemCount(order) === 1 ? 'Item' : 'Items'}
+                        </Text>
+                      </View>
                     </View>
                   </View>
-                </View>
 
-                <View style={styles.orderActions}>
-                  {activeTab === 'ongoing' ? (
-                    <>
-                      <TouchableOpacity
-                        style={styles.trackButton}
-                        onPress={() => router.push('/track-order' as never)}
-                      >
-                        <Text style={styles.trackButtonText}>Track Order</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={styles.cancelButton}
-                        onPress={() => handleCancelOrder(order.id)}
-                      >
-                        <Text style={styles.cancelButtonText}>Cancel</Text>
-                      </TouchableOpacity>
-                    </>
-                  ) : (
-                    <>
-                      <TouchableOpacity 
-                        style={styles.rateButton}
-                        onPress={() => handleRateOrder(order.id)}
-                      >
-                        <Text style={styles.rateButtonText}>Rate</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={styles.reorderButton}
-                        onPress={() => handleReorder(order)}
-                      >
-                        <Text style={styles.reorderButtonText}>Re-Order</Text>
-                      </TouchableOpacity>
-                    </>
-                  )}
+                  <View style={styles.orderActions}>
+                    {activeTab === 'ongoing' ? (
+                      <>
+                        <TouchableOpacity
+                          style={styles.trackButton}
+                          onPress={() => router.push('/track-order' as never)}
+                        >
+                          <Text style={styles.trackButtonText}>Track Order</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={styles.cancelButton}
+                          onPress={() => handleCancelOrder(order.id)}
+                        >
+                          <Text style={styles.cancelButtonText}>Cancel</Text>
+                        </TouchableOpacity>
+                      </>
+                    ) : (
+                      <>
+                        <TouchableOpacity 
+                          style={styles.rateButton}
+                          onPress={() => handleRateOrder(order.id)}
+                        >
+                          <Text style={styles.rateButtonText}>Rate</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={styles.reorderButton}
+                          onPress={() => handleReorder(order)}
+                        >
+                          <Text style={styles.reorderButtonText}>Re-Order</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                  </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
 
