@@ -12,7 +12,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Search, ShoppingBag, User, Mic, X } from 'lucide-react-native';
+import { Search, ShoppingBag, User, Mic, X, Clock, TrendingUp, Award } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import { Image } from 'expo-image';
 import { useApp } from '@/contexts/AppContext';
@@ -29,15 +29,12 @@ export default function Home() {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const pulseAnim = useState(new Animated.Value(1))[0];
 
-  const featuredProducts = products?.slice(0, 3) || [];
+  const featuredProducts = products?.slice(0, 4) || [];
 
   const startRecording = async () => {
     try {
       const permission = await Audio.requestPermissionsAsync();
-      if (!permission.granted) {
-        console.log('Permission to access microphone was denied');
-        return;
-      }
+      if (!permission.granted) return;
 
       if (Platform.OS !== 'web') {
         await Audio.setAudioModeAsync({
@@ -88,9 +85,7 @@ export default function Home() {
       setRecording(null);
       pulseAnim.stopAnimation();
       pulseAnim.setValue(1);
-
       setShowMicModal(false);
-      console.log('Recording stopped');
     } catch (err) {
       console.error('Failed to stop recording', err);
     }
@@ -111,7 +106,6 @@ export default function Home() {
     }
   };
 
-  // Get unique categories with product counts
   const categories = React.useMemo(() => {
     if (!products) return [];
     const categoryMap = new Map<string, number>();
@@ -180,57 +174,80 @@ export default function Home() {
           </TouchableOpacity>
         </View>
 
+        {/* Quick Stats Cards - REDESIGNED */}
+        <View style={styles.quickStatsContainer}>
+          <View style={styles.statCardPrimary}>
+            <View style={styles.statIconContainer}>
+              <TrendingUp size={24} color={colors.white} />
+            </View>
+            <View style={styles.statContent}>
+              <Text style={styles.statValue}>{products?.length || 0}</Text>
+              <Text style={styles.statLabel}>Available Dishes</Text>
+            </View>
+          </View>
+          
+          <View style={styles.statsRow}>
+            <View style={styles.statCardSecondary}>
+              <Award size={20} color={colors.primary} />
+              <Text style={styles.statValueSmall}>4.8★</Text>
+              <Text style={styles.statLabelSmall}>Avg Rating</Text>
+            </View>
+            
+            <View style={styles.statCardSecondary}>
+              <Clock size={20} color={colors.primary} />
+              <Text style={styles.statValueSmall}>25-35</Text>
+              <Text style={styles.statLabelSmall}>Minutes</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Featured Dishes */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Featured Dishes</Text>
             <TouchableOpacity onPress={() => router.push('/search' as never)}>
-              <Text style={styles.seeAll}>See All</Text>
+              <Text style={styles.seeAll}>See All →</Text>
             </TouchableOpacity>
           </View>
 
           {isLoading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={styles.loadingText}>Loading delicious meals...</Text>
-            </View>
-          ) : error ? (
-            <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>Failed to load products</Text>
-              <TouchableOpacity 
-                style={styles.retryButton}
-                onPress={() => window.location.reload()}
-              >
-                <Text style={styles.retryButtonText}>Retry</Text>
-              </TouchableOpacity>
-            </View>
-          ) : featuredProducts.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No products available yet</Text>
             </View>
           ) : (
             <ScrollView 
               horizontal 
               showsHorizontalScrollIndicator={false} 
-              style={styles.categoriesScroll}
+              style={styles.featuredScroll}
+              contentContainerStyle={{ paddingHorizontal: 20 }}
             >
               {featuredProducts.map((product) => (
                 <TouchableOpacity
                   key={product.id}
-                  style={styles.categoryCard}
+                  style={styles.featuredCard}
                   onPress={() => router.push(`/product/${product.id}` as never)}
                 >
                   <Image 
                     source={{ uri: product.image }} 
-                    style={styles.categoryImage} 
+                    style={styles.featuredImage} 
                     contentFit="cover" 
                   />
-                  <View style={styles.categoryInfo}>
-                    <Text style={styles.categoryName} numberOfLines={1}>
+                  <View style={styles.featuredOverlay}>
+                    <View style={styles.featuredBadge}>
+                      <Text style={styles.featuredBadgeText}>★ {product.rating}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.featuredInfo}>
+                    <Text style={styles.featuredName} numberOfLines={1}>
                       {product.name}
                     </Text>
-                    <Text style={styles.categoryPrice}>
-                      Starting {product.price} DT
-                    </Text>
+                    <View style={styles.featuredFooter}>
+                      <Text style={styles.featuredPrice}>{product.price} DT</Text>
+                      <View style={styles.featuredTime}>
+                        <Clock size={12} color={colors.textLight} />
+                        <Text style={styles.featuredTimeText}>{product.cookTime}min</Text>
+                      </View>
+                    </View>
                   </View>
                 </TouchableOpacity>
               ))}
@@ -238,7 +255,7 @@ export default function Home() {
           )}
         </View>
 
-        {/* Popular Categories Section */}
+        {/* Popular Categories */}
         {!isLoading && categories.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -252,69 +269,55 @@ export default function Home() {
               {categories.map((category) => (
                 <TouchableOpacity
                   key={category.name}
-                  style={styles.categoryBadge}
+                  style={styles.categoryChip}
                   onPress={() => handleCategoryPress(category.name)}
                 >
-                  <Text style={styles.categoryBadgeText}>{category.name}</Text>
-                  <Text style={styles.categoryBadgeCount}>
-                    {category.count} items
+                  <Text style={styles.categoryChipEmoji}>
+                    {category.name === 'Tunisian' ? '🇹🇳' : 
+                     category.name === 'Italian' ? '🇮🇹' :
+                     category.name === 'American' ? '🇺🇸' : 
+                     category.name === 'Seafood' ? '🦞' : '🍽️'}
                   </Text>
+                  <Text style={styles.categoryChipText}>{category.name}</Text>
+                  <Text style={styles.categoryChipCount}>{category.count}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
           </View>
         )}
 
-        {/* Quick Stats Section */}
-        <View style={styles.statsSection}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{products?.length || 0}</Text>
-            <Text style={styles.statLabel}>Available Dishes</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>4.8★</Text>
-            <Text style={styles.statLabel}>Average Rating</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>20-45min</Text>
-            <Text style={styles.statLabel}>Delivery Time</Text>
-          </View>
-        </View>
-
-        {/* Why Choose Us Section - FIXED LAYOUT */}
+        {/* Why Choose Us - ELEGANT REDESIGN */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Why Choose Tawa?</Text>
-          <View style={styles.featuresContainer}>
-            <View style={styles.featureItem}>
-              <View style={styles.featureIcon}>
-                <Text style={styles.featureEmoji}>🍳</Text>
+          <View style={styles.whyChooseContainer}>
+            <View style={styles.featureCard}>
+              <View style={styles.featureIconLarge}>
+                <Text style={styles.featureEmojiLarge}>🍳</Text>
               </View>
-              <View style={styles.featureTextContainer}>
-                <Text style={styles.featureTitle}>Fresh Ingredients</Text>
-                <Text style={styles.featureDesc}>
-                  All ingredients are fresh and locally sourced
+              <Text style={styles.featureTitleLarge}>Fresh Ingredients</Text>
+              <Text style={styles.featureDescLarge}>
+                All ingredients are fresh and locally sourced daily
+              </Text>
+            </View>
+
+            <View style={styles.featureRow}>
+              <View style={styles.featureCardSmall}>
+                <View style={styles.featureIconSmall}>
+                  <Text style={styles.featureEmojiSmall}>⚡</Text>
+                </View>
+                <Text style={styles.featureTitleSmall}>Fast Delivery</Text>
+                <Text style={styles.featureDescSmall}>
+                  25-35 min delivery
                 </Text>
               </View>
-            </View>
-            <View style={styles.featureItem}>
-              <View style={styles.featureIcon}>
-                <Text style={styles.featureEmoji}>⚡</Text>
-              </View>
-              <View style={styles.featureTextContainer}>
-                <Text style={styles.featureTitle}>Fast Delivery</Text>
-                <Text style={styles.featureDesc}>
-                  Get your meal kits delivered in 20-45 minutes
-                </Text>
-              </View>
-            </View>
-            <View style={styles.featureItem}>
-              <View style={styles.featureIcon}>
-                <Text style={styles.featureEmoji}>📖</Text>
-              </View>
-              <View style={styles.featureTextContainer}>
-                <Text style={styles.featureTitle}>Easy Recipes</Text>
-                <Text style={styles.featureDesc}>
-                  Step-by-step instructions for perfect meals
+
+              <View style={styles.featureCardSmall}>
+                <View style={styles.featureIconSmall}>
+                  <Text style={styles.featureEmojiSmall}>📖</Text>
+                </View>
+                <Text style={styles.featureTitleSmall}>Easy Recipes</Text>
+                <Text style={styles.featureDescSmall}>
+                  Step-by-step guide
                 </Text>
               </View>
             </View>
@@ -454,6 +457,64 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  quickStatsContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 24,
+  },
+  statCardPrimary: {
+    flexDirection: 'row',
+    backgroundColor: colors.primary,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  statIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  statContent: {
+    flex: 1,
+  },
+  statValue: {
+    fontSize: 28,
+    fontWeight: '700' as const,
+    color: colors.white,
+  },
+  statLabel: {
+    fontSize: 14,
+    color: colors.white,
+    opacity: 0.9,
+    marginTop: 4,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  statCardSecondary: {
+    flex: 1,
+    backgroundColor: colors.lightGray,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  statValueSmall: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: colors.textDark,
+    marginTop: 8,
+  },
+  statLabelSmall: {
+    fontSize: 11,
+    color: colors.textLight,
+    marginTop: 4,
+    textAlign: 'center',
+  },
   section: {
     marginBottom: 24,
   },
@@ -475,72 +536,72 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
   },
   loadingContainer: {
-    paddingVertical: 60,
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: colors.textLight,
-  },
-  errorContainer: {
-    paddingVertical: 40,
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  errorText: {
-    fontSize: 14,
-    color: colors.error,
-    marginBottom: 16,
-  },
-  retryButton: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: colors.white,
-    fontSize: 14,
-    fontWeight: '600' as const,
-  },
-  emptyContainer: {
     paddingVertical: 40,
     alignItems: 'center',
   },
-  emptyText: {
-    fontSize: 14,
-    color: colors.textLight,
+  featuredScroll: {
+    marginLeft: 0,
   },
-  categoriesScroll: {
-    paddingLeft: 20,
-  },
-  categoryCard: {
-    width: 140,
+  featuredCard: {
+    width: 180,
     marginRight: 16,
     borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: colors.white,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 5,
   },
-  categoryImage: {
+  featuredImage: {
     width: '100%',
-    height: 120,
+    height: 140,
   },
-  categoryInfo: {
+  featuredOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     padding: 12,
   },
-  categoryName: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: colors.textDark,
-    marginBottom: 4,
+  featuredBadge: {
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignSelf: 'flex-start',
   },
-  categoryPrice: {
+  featuredBadgeText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: colors.textDark,
+  },
+  featuredInfo: {
+    padding: 12,
+  },
+  featuredName: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: colors.textDark,
+    marginBottom: 8,
+  },
+  featuredFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  featuredPrice: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: colors.primary,
+  },
+  featuredTime: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  featuredTimeText: {
     fontSize: 12,
     color: colors.textLight,
   },
@@ -548,82 +609,97 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     gap: 12,
   },
-  categoryBadge: {
-    backgroundColor: colors.lightBlue,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
+  categoryChip: {
+    backgroundColor: colors.lightGray,
+    borderRadius: 16,
+    padding: 16,
     alignItems: 'center',
+    minWidth: 100,
   },
-  categoryBadgeText: {
-    fontSize: 14,
+  categoryChipEmoji: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  categoryChipText: {
+    fontSize: 13,
     fontWeight: '700' as const,
     color: colors.textDark,
     marginBottom: 4,
   },
-  categoryBadgeCount: {
-    fontSize: 12,
+  categoryChipCount: {
+    fontSize: 11,
     color: colors.textLight,
   },
-  statsSection: {
-    flexDirection: 'row',
+  whyChooseContainer: {
     paddingHorizontal: 20,
-    gap: 12,
-    marginBottom: 24,
   },
-  statCard: {
+  featureCard: {
+    backgroundColor: colors.primary,
+    borderRadius: 16,
+    padding: 24,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  featureIconLarge: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  featureEmojiLarge: {
+    fontSize: 32,
+  },
+  featureTitleLarge: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: colors.white,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  featureDescLarge: {
+    fontSize: 14,
+    color: colors.white,
+    opacity: 0.9,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  featureRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  featureCardSmall: {
     flex: 1,
     backgroundColor: colors.lightGray,
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     alignItems: 'center',
   },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: '700' as const,
-    color: colors.primary,
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 11,
-    color: colors.textLight,
-    textAlign: 'center',
-  },
-  featuresContainer: {
-    paddingHorizontal: 20,
-    gap: 16,
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: colors.lightGray,
-    borderRadius: 12,
-    padding: 16,
-    gap: 12,
-  },
-  featureIcon: {
+  featureIconSmall: {
     width: 48,
     height: 48,
     borderRadius: 24,
     backgroundColor: colors.white,
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 12,
   },
-  featureEmoji: {
+  featureEmojiSmall: {
     fontSize: 24,
   },
-  featureTextContainer: {
-    flex: 1,
-  },
-  featureTitle: {
+  featureTitleSmall: {
     fontSize: 14,
     fontWeight: '700' as const,
     color: colors.textDark,
     marginBottom: 4,
+    textAlign: 'center',
   },
-  featureDesc: {
-    fontSize: 12,
+  featureDescSmall: {
+    fontSize: 11,
     color: colors.textLight,
+    textAlign: 'center',
     lineHeight: 16,
   },
   micModalOverlay: {

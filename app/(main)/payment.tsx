@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,54 +7,87 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft } from 'lucide-react-native';
+import { ChevronLeft, CreditCard } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import colors from '@/constants/colors';
-
-const paymentMethods = [
-  { id: 'cash', label: 'Cash' },
-  { id: 'visa', label: 'Visa' },
-  { id: 'mastercard', label: 'Mastercard' },
-];
 
 export default function Payment() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { cartTotal, clearCart } = useApp();
+  const { cartTotal, createOrder, paymentMethods, selectedPaymentMethod, setSelectedPaymentMethod } = useApp();
   const [selectedMethod, setSelectedMethod] = useState('cash');
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // Load saved payment methods
+  useEffect(() => {
+    if (selectedPaymentMethod) {
+      setSelectedMethod(selectedPaymentMethod.type);
+    }
+  }, [selectedPaymentMethod]);
 
   const handlePayment = async () => {
-    if (selectedMethod === 'cash') {
-      Alert.alert(
-        'Cash Payment',
-        'Please give the money to the courier when your order arrives.',
-        [
-          {
-            text: 'OK',
-            onPress: async () => {
-              await clearCart();
-              router.replace('/order-success' as never);
+    if (isProcessing) return;
+
+    setIsProcessing(true);
+
+    try {
+      if (selectedMethod === 'cash') {
+        // Create order with cash payment
+        const orderNumber = await createOrder();
+        
+        Alert.alert(
+          'Order Placed!',
+          'Please prepare cash for the courier when your order arrives.',
+          [
+            {
+              text: 'OK',
+              onPress: () => router.replace('/order-success' as never),
             },
-          },
-        ]
-      );
-    } else if (selectedMethod === 'visa' || selectedMethod === 'mastercard') {
-      Alert.alert(
-        'Card Payment',
-        'Please add your card details first.',
-        [
-          {
-            text: 'Add Card',
-            onPress: () => router.push('/add-card' as never),
-          },
-          {
-            text: 'Cancel',
-            style: 'cancel',
-          },
-        ]
-      );
+          ]
+        );
+      } else if (selectedMethod === 'visa' || selectedMethod === 'mastercard') {
+        // Check if card is saved
+        const savedCard = paymentMethods.find(pm => pm.type === selectedMethod);
+        
+        if (!savedCard) {
+          Alert.alert(
+            'Card Required',
+            'Please add your card details first.',
+            [
+              {
+                text: 'Add Card',
+                onPress: () => router.push('/add-card' as never),
+              },
+              {
+                text: 'Cancel',
+                style: 'cancel',
+              },
+            ]
+          );
+        } else {
+          // Process card payment
+          const orderNumber = await createOrder();
+          
+          Alert.alert(
+            'Payment Successful!',
+            'Your order has been placed successfully.',
+            [
+              {
+                text: 'OK',
+                onPress: () => router.replace('/order-success' as never),
+              },
+            ]
+          );
+        }
+      }
+    } catch (error: any) {
+      console.error('Payment error:', error);
+      Alert.alert('Payment Failed', error.message || 'Failed to process payment. Please try again.');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -75,38 +108,61 @@ export default function Payment() {
       >
         <Text style={styles.sectionTitle}>SELECT PAYMENT METHOD</Text>
 
-        <View style={styles.methodsRow}>
+        <View style={styles.methodsSection}>
+          {/* Cash Option */}
+          <TouchableOpacity
+            style={[
+              styles.methodCard,
+              selectedMethod === 'cash' && styles.methodCardActive,
+            ]}
+            onPress={() => setSelectedMethod('cash')}
+          >
+            {selectedMethod === 'cash' && (
+              <View style={styles.checkmark}>
+                <Text style={styles.checkmarkText}>✓</Text>
+              </View>
+            )}
+            <Text style={styles.cashIcon}>💵</Text>
+            <Text style={styles.methodLabel}>Cash</Text>
+            <Text style={styles.methodSubtext}>Pay on delivery</Text>
+          </TouchableOpacity>
+
+          {/* Saved Cards */}
           {paymentMethods.map((method) => (
             <TouchableOpacity
               key={method.id}
               style={[
                 styles.methodCard,
-                selectedMethod === method.id && styles.methodCardActive,
+                selectedMethod === method.type && styles.methodCardActive,
               ]}
-              onPress={() => setSelectedMethod(method.id)}
+              onPress={() => {
+                setSelectedMethod(method.type);
+                setSelectedPaymentMethod(method);
+              }}
             >
-              {selectedMethod === method.id && (
+              {selectedMethod === method.type && (
                 <View style={styles.checkmark}>
                   <Text style={styles.checkmarkText}>✓</Text>
                 </View>
               )}
-              {method.id === 'cash' && (
-                <Text style={styles.cashIcon}>💵</Text>
-              )}
-              {method.id === 'visa' && (
-                <View style={styles.visaIcon}>
-                  <Text style={styles.visaText}>VISA</Text>
-                </View>
-              )}
-              {method.id === 'mastercard' && (
-                <View style={styles.mastercardIcon}>
-                  <View style={styles.mastercardCircle1} />
-                  <View style={styles.mastercardCircle2} />
-                </View>
-              )}
-              <Text style={styles.methodLabel}>{method.label}</Text>
+              <CreditCard size={32} color={colors.primary} />
+              <Text style={styles.methodLabel}>
+                {method.type === 'visa' ? 'Visa' : 'Mastercard'}
+              </Text>
+              <Text style={styles.methodSubtext}>
+                •••• {method.cardNumber}
+              </Text>
             </TouchableOpacity>
           ))}
+
+          {/* Add New Card Option */}
+          <TouchableOpacity
+            style={styles.addCardButton}
+            onPress={() => router.push('/add-card' as never)}
+          >
+            <Text style={styles.addCardIcon}>+</Text>
+            <Text style={styles.addCardText}>Add New Card</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.paymentDetails}>
@@ -123,36 +179,12 @@ export default function Payment() {
             </View>
           )}
 
-          {selectedMethod === 'visa' && (
+          {(selectedMethod === 'visa' || selectedMethod === 'mastercard') && (
             <View style={styles.detailsCard}>
-              <Text style={styles.detailsTitle}>💳 Visa Card</Text>
+              <Text style={styles.detailsTitle}>💳 Card Payment</Text>
               <Text style={styles.detailsText}>
-                Pay securely with your Visa card. Your card details are encrypted and safe.
+                Your card will be charged immediately. All transactions are secure and encrypted.
               </Text>
-              <TouchableOpacity 
-                style={styles.addCardButton}
-                onPress={() => router.push('/add-card' as never)}
-              >
-                <Text style={styles.addCardText}>+ ADD VISA CARD</Text>
-              </TouchableOpacity>
-              <View style={styles.securityBadge}>
-                <Text style={styles.securityText}>🔒 Secure Payment</Text>
-              </View>
-            </View>
-          )}
-
-          {selectedMethod === 'mastercard' && (
-            <View style={styles.detailsCard}>
-              <Text style={styles.detailsTitle}>💳 Mastercard</Text>
-              <Text style={styles.detailsText}>
-                Pay securely with your Mastercard. Your card details are encrypted and safe.
-              </Text>
-              <TouchableOpacity 
-                style={styles.addCardButton}
-                onPress={() => router.push('/add-card' as never)}
-              >
-                <Text style={styles.addCardText}>+ ADD MASTERCARD</Text>
-              </TouchableOpacity>
               <View style={styles.securityBadge}>
                 <Text style={styles.securityText}>🔒 Secure Payment</Text>
               </View>
@@ -184,10 +216,18 @@ export default function Payment() {
           <Text style={styles.totalValue}>{(cartTotal + 2).toFixed(2)} DT</Text>
         </View>
 
-        <TouchableOpacity style={styles.confirmButton} onPress={handlePayment}>
-          <Text style={styles.confirmButtonText}>
-            {selectedMethod === 'cash' ? 'CONFIRM ORDER' : 'PAY & CONFIRM'}
-          </Text>
+        <TouchableOpacity 
+          style={[styles.confirmButton, isProcessing && styles.confirmButtonDisabled]} 
+          onPress={handlePayment}
+          disabled={isProcessing}
+        >
+          {isProcessing ? (
+            <ActivityIndicator color={colors.white} />
+          ) : (
+            <Text style={styles.confirmButtonText}>
+              {selectedMethod === 'cash' ? 'CONFIRM ORDER' : 'PAY & CONFIRM'}
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
     </View>
@@ -233,18 +273,15 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     letterSpacing: 0.5,
   },
-  methodsRow: {
-    flexDirection: 'row',
+  methodsSection: {
     paddingHorizontal: 20,
-    gap: 12,
     marginBottom: 32,
   },
   methodCard: {
-    flex: 1,
-    aspectRatio: 1,
     backgroundColor: colors.lightGray,
     borderRadius: 16,
-    justifyContent: 'center',
+    padding: 20,
+    marginBottom: 12,
     alignItems: 'center',
     borderWidth: 2,
     borderColor: 'transparent',
@@ -252,11 +289,12 @@ const styles = StyleSheet.create({
   },
   methodCardActive: {
     borderColor: colors.primary,
+    backgroundColor: colors.primary + '10',
   },
   checkmark: {
     position: 'absolute',
-    top: 8,
-    right: 8,
+    top: 12,
+    right: 12,
     width: 24,
     height: 24,
     borderRadius: 12,
@@ -270,41 +308,37 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
   },
   methodLabel: {
-    fontSize: 14,
-    fontWeight: '600' as const,
+    fontSize: 16,
+    fontWeight: '700' as const,
     color: colors.textDark,
     marginTop: 8,
+  },
+  methodSubtext: {
+    fontSize: 12,
+    color: colors.textLight,
+    marginTop: 4,
   },
   cashIcon: {
     fontSize: 40,
   },
-  visaIcon: {
-    backgroundColor: '#1A1F71',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-  },
-  visaText: {
-    color: colors.white,
-    fontSize: 18,
-    fontWeight: '700' as const,
-  },
-  mastercardIcon: {
-    flexDirection: 'row',
+  addCardButton: {
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    padding: 20,
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.primary,
+    borderStyle: 'dashed',
   },
-  mastercardCircle1: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#EB001B',
+  addCardIcon: {
+    fontSize: 32,
+    color: colors.primary,
+    marginBottom: 8,
   },
-  mastercardCircle2: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F79E1B',
-    marginLeft: -12,
+  addCardText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: colors.primary,
   },
   paymentDetails: {
     paddingHorizontal: 20,
@@ -337,21 +371,6 @@ const styles = StyleSheet.create({
   infoText: {
     fontSize: 12,
     color: colors.textDark,
-  },
-  addCardButton: {
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: colors.primary,
-    marginBottom: 12,
-  },
-  addCardText: {
-    color: colors.primary,
-    fontSize: 14,
-    fontWeight: '700' as const,
-    letterSpacing: 0.5,
   },
   securityBadge: {
     flexDirection: 'row',
@@ -439,6 +458,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
+  },
+  confirmButtonDisabled: {
+    opacity: 0.6,
   },
   confirmButtonText: {
     color: colors.white,

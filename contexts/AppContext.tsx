@@ -16,50 +16,124 @@ export const [AppContext, useApp] = createContextHook(() => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    initializeApp();
-  }, []);
-
-  const initializeApp = async () => {
+  // Separate function for loading cart data
+  const loadCartData = useCallback(async (userId: string) => {
     try {
-      const onboardingComplete = await AsyncStorage.getItem('onboardingComplete');
-      if (onboardingComplete) {
-        setHasCompletedOnboarding(true);
-      }
-
-      const { data: { session } } = await supabase.auth.getSession();
+      console.log('🛒 LOAD CART DATA - Loading cart for user:', userId);
       
-      if (session?.user) {
-        setIsAuthenticated(true);
-        await loadUserData(session.user.id);
+      const { data: cartData, error: cartError } = await supabase
+        .from('cart')
+        .select(`
+          id,
+          quantity,
+          size,
+          cooked,
+          product_id,
+          products (
+            id,
+            name,
+            description,
+            price,
+            image_url,
+            rating,
+            cook_time,
+            servings,
+            category,
+            calories,
+            protein,
+            fiber,
+            water,
+            fat
+          )
+        `)
+        .eq('user_id', userId);
+  
+      console.log('🛒 LOAD CART DATA - Raw DB response:', {
+        data: cartData,
+        error: cartError,
+        count: cartData?.length || 0
+      });
+  
+      if (cartError) {
+        console.error('Cart loading error:', cartError);
+        setCart([]);
+        return;
       }
-
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(
-        async (_event, session) => {
-          if (session?.user) {
-            setIsAuthenticated(true);
-            await loadUserData(session.user.id);
-          } else {
-            setIsAuthenticated(false);
-            setUser(null);
-          }
+  
+      if (!cartData || cartData.length === 0) {
+        console.log('🛒 LOAD CART DATA - No cart items found');
+        setCart([]);
+        return;
+      }
+  
+      // Process cart items - FIXED: Handle both array and object formats
+      const validCartItems = cartData.filter(item => {
+        // Check if products exists and is not null/undefined
+        const hasProducts = item.products && typeof item.products === 'object';
+        
+        if (!hasProducts) {
+          console.warn('🛒 LOAD CART DATA - Filtering invalid item (no products):', item);
+          return false;
         }
-      );
-
-      setLoading(false);
-
-      return () => {
-        subscription.unsubscribe();
-      };
+        
+        // Check if the product has required fields
+        const product = item.products;
+        const isValidProduct = product.id && product.name && product.price !== undefined;
+        
+        if (!isValidProduct) {
+          console.warn('🛒 LOAD CART DATA - Filtering invalid product data:', item);
+          return false;
+        }
+        
+        return true;
+      });
+  
+      console.log('🛒 LOAD CART DATA - Valid items after filtering:', validCartItems.length);
+  
+      const formattedCart: CartItem[] = validCartItems.map(item => {
+        // FIX: products is an object, not an array
+        const product = item.products;
+        console.log('🛒 LOAD CART DATA - Processing product:', product);
+        
+        return {
+          id: item.id,
+          product: {
+            id: product.id,
+            name: product.name,
+            description: product.description || '',
+            price: Number(product.price) || 0,
+            image: product.image_url,
+            rating: Number(product.rating) || 0,
+            cookTime: product.cook_time,
+            servings: product.servings,
+            category: product.category,
+            calories: product.calories,
+            protein: product.protein,
+            fiber: product.fiber,
+            water: product.water,
+            fat: product.fat,
+          },
+          quantity: item.quantity,
+          size: item.size as 'S' | 'M' | 'L' | undefined,
+          cooked: item.cooked,
+        };
+      });
+  
+      console.log('🛒 LOAD CART DATA - Final cart to set:', formattedCart);
+      setCart(formattedCart);
+      
     } catch (error) {
-      console.error('Error initializing app:', error);
-      setLoading(false);
+      console.error('Error loading cart data:', error);
+      setCart([]);
     }
-  };
+  }, []);
 
   const loadUserData = async (userId: string) => {
     try {
+      console.log('🔄 LOAD USER DATA - Starting for user:', userId);
+      
       // Load user profile
       const { data: userData, error: userError } = await supabase
         .from('users')
@@ -67,16 +141,24 @@ export const [AppContext, useApp] = createContextHook(() => {
         .eq('id', userId)
         .single();
 
-      if (userError) throw userError;
+      if (userError) {
+        console.error('Error loading user profile:', userError);
+        throw userError;
+      }
       
-      setUser({
-        id: userData.id,
-        name: userData.name,
-        email: userData.email,
-        phone: userData.phone || '',
-        bio: userData.bio || '',
-        avatar: userData.avatar_url,
-      });
+      if (userData) {
+        setUser({
+          id: userData.id,
+          name: userData.name,
+          email: userData.email,
+          phone: userData.phone || '',
+          bio: userData.bio || '',
+          avatar: userData.avatar_url,
+        });
+      }
+
+      // Load cart data
+      await loadCartData(userId);
 
       // Load addresses
       const { data: addressesData } = await supabase
@@ -100,47 +182,6 @@ export const [AppContext, useApp] = createContextHook(() => {
         }
       }
 
-      // Load cart with product details
-      const { data: cartData } = await supabase
-        .from('cart')
-        .select(`
-          id,
-          quantity,
-          size,
-          cooked,
-          products (*)
-        `)
-        .eq('user_id', userId);
-
-      if (cartData) {
-        const formattedCart: CartItem[] = cartData.map((value: { id: any; quantity: any; size: any; cooked: any; products: any[]; }, index: number) => {
-          const product = value.products[0]; // Assuming that the product is the first element in the products array
-          return {
-            id: value.id,
-            product: {
-              id: product.id,
-              name: product.name,
-              description: product.description || '',
-              price: Number(product.price),
-              image: product.image_url,
-              rating: Number(product.rating),
-              cookTime: product.cook_time,
-              servings: product.servings,
-              category: product.category,
-              calories: product.calories,
-              protein: product.protein,
-              fiber: product.fiber,
-              water: product.water,
-              fat: product.fat,
-            },
-            quantity: value.quantity,
-            size: value.size as 'S' | 'M' | 'L' | undefined,
-            cooked: value.cooked,
-          };
-        });
-        setCart(formattedCart);
-      }
-
       // Load payment methods
       const { data: paymentData } = await supabase
         .from('payment_methods')
@@ -154,6 +195,7 @@ export const [AppContext, useApp] = createContextHook(() => {
           type: pm.type as 'cash' | 'visa' | 'mastercard' | 'paypal',
           cardNumber: pm.card_number,
           cardHolder: pm.card_holder,
+          expiryDate: pm.expiry_date,
         }));
         setPaymentMethods(formattedPayments);
         if (formattedPayments.length > 0) {
@@ -217,6 +259,62 @@ export const [AppContext, useApp] = createContextHook(() => {
       }
     } catch (error) {
       console.error('Error loading user data:', error);
+      setError('Failed to load user data');
+    }
+  };
+
+  const refreshCart = useCallback(async () => {
+    if (user) {
+      console.log('🔄 MANUAL CART REFRESH - Triggered');
+      await loadCartData(user.id);
+    }
+  }, [user, loadCartData]);
+
+  useEffect(() => {
+    initializeApp();
+  }, []);
+
+  const initializeApp = async () => {
+    try {
+      setError(null);
+      const onboardingComplete = await AsyncStorage.getItem('onboardingComplete');
+      if (onboardingComplete) {
+        setHasCompletedOnboarding(true);
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        setIsAuthenticated(true);
+        await loadUserData(session.user.id);
+      }
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        async (_event, session) => {
+          if (session?.user) {
+            setIsAuthenticated(true);
+            await loadUserData(session.user.id);
+          } else {
+            setIsAuthenticated(false);
+            setUser(null);
+            setCart([]);
+            setAddresses([]);
+            setOrders([]);
+            setFavorites([]);
+            setPaymentMethods([]);
+          }
+        }
+      );
+
+      setLoading(false);
+
+      return () => {
+        subscription.unsubscribe();
+      };
+    } catch (error) {
+      console.error('Error initializing app:', error);
+      setError('Failed to initialize app');
+      setLoading(false);
     }
   };
 
@@ -288,69 +386,105 @@ export const [AppContext, useApp] = createContextHook(() => {
     }
   }, [user]);
 
-  const addToCart = useCallback(async (item: CartItem) => {
+  const addToCart = useCallback(async (item: Omit<CartItem, 'id'>) => {
+    if (!user) {
+      console.error('No user found - cannot add to cart');
+      throw new Error('User must be logged in to add to cart');
+    }
+  
+    try {
+      console.log('🛒 ADD TO CART - User:', user.id, 'Product:', item.product.id);
+      
+      // First check if item already exists with the same attributes
+      const { data: existingItems, error: checkError } = await supabase
+        .from('cart')
+        .select('id, quantity')
+        .eq('user_id', user.id)
+        .eq('product_id', item.product.id)
+        .eq('size', item.size || null)
+        .eq('cooked', item.cooked || false);
+  
+      if (checkError) {
+        console.error('Error checking existing cart items:', checkError);
+        throw checkError;
+      }
+  
+      if (existingItems && existingItems.length > 0) {
+        // Update existing item
+        const { error } = await supabase
+          .from('cart')
+          .update({ 
+            quantity: existingItems[0].quantity + item.quantity,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingItems[0].id);
+  
+        if (error) {
+          console.error('Error updating cart item:', error);
+          throw error;
+        }
+        console.log('🛒 ADD TO CART - Updated existing item');
+      } else {
+        // Insert new item
+        const { error } = await supabase
+          .from('cart')
+          .insert({
+            user_id: user.id,
+            product_id: item.product.id,
+            quantity: item.quantity,
+            size: item.size || null,
+            cooked: item.cooked || false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+  
+        if (error) {
+          console.error('Error inserting cart item:', error);
+          throw error;
+        }
+        console.log('🛒 ADD TO CART - Inserted new item');
+      }
+  
+      // Force reload cart data with a small delay to ensure DB consistency
+      setTimeout(async () => {
+        await loadCartData(user.id);
+      }, 200);
+      
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      throw error;
+    }
+  }, [user, loadCartData]);
+
+  const updateCartItem = useCallback(async (cartItemId: string, quantity: number) => {
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
-        .from('cart')
-        .upsert({
-          user_id: user.id,
-          product_id: item.product.id,
-          quantity: item.quantity,
-          size: item.size || null,
-          cooked: item.cooked || false,
-        }, {
-          onConflict: 'user_id,product_id,size,cooked'
-        })
-        .select(`
-          id,
-          quantity,
-          size,
-          cooked,
-          products (*)
-        `)
-        .single();
-
-      if (error) throw error;
-
-      await loadUserData(user.id);
-    } catch (error) {
-      console.error('Error adding to cart:', error);
-    }
-  }, [user]);
-
-  const updateCartItem = useCallback(async (index: number, quantity: number) => {
-    if (!user || !cart[index]) return;
-
-    try {
-      const cartItem = cart[index];
-      
       if (quantity <= 0) {
-        await supabase.from('cart').delete().eq('id', cartItem.id);
+        await supabase.from('cart').delete().eq('id', cartItemId);
       } else {
         await supabase
           .from('cart')
           .update({ quantity })
-          .eq('id', cartItem.id);
+          .eq('id', cartItemId);
       }
 
-      await loadUserData(user.id);
+      await loadCartData(user.id);
     } catch (error) {
       console.error('Error updating cart:', error);
     }
-  }, [user, cart]);
+  }, [user, loadCartData]);
 
-  const removeFromCart = useCallback(async (index: number) => {
-    if (!user || !cart[index]) return;
+  const removeFromCart = useCallback(async (cartItemId: string) => {
+    if (!user) return;
 
     try {
-      await supabase.from('cart').delete().eq('id', cart[index].id);
-      await loadUserData(user.id);
+      await supabase.from('cart').delete().eq('id', cartItemId);
+      await loadCartData(user.id);
     } catch (error) {
       console.error('Error removing from cart:', error);
     }
-  }, [user, cart]);
+  }, [user, loadCartData]);
 
   const clearCart = useCallback(async () => {
     if (!user) return;
@@ -362,6 +496,63 @@ export const [AppContext, useApp] = createContextHook(() => {
       console.error('Error clearing cart:', error);
     }
   }, [user]);
+
+  const createOrder = useCallback(async () => {
+    if (!user || cart.length === 0) {
+      console.error('Cannot create order: No user or empty cart');
+      throw new Error('Cannot create order with empty cart');
+    }
+  
+    try {
+      const cartTotal = cart.reduce((total, item) => total + (item.product.price * item.quantity), 0);
+      const orderNumber = `ORD-${Date.now()}`;
+      const total = cartTotal + 2; // Including delivery fee
+  
+      // Create order
+      const { data: orderData, error: orderError } = await supabase
+        .from('orders')
+        .insert({
+          user_id: user.id,
+          order_number: orderNumber,
+          total: total,
+          delivery_fee: 2.00,
+          status: 'pending',
+          address_id: selectedAddress?.id || null,
+          payment_method_id: selectedPaymentMethod?.id || null,
+        })
+        .select()
+        .single();
+  
+      if (orderError) throw orderError;
+  
+      // Create order items
+      const orderItems = cart.map(item => ({
+        order_id: orderData.id,
+        product_id: item.product.id,
+        quantity: item.quantity,
+        size: item.size || null,
+        cooked: item.cooked || false,
+        price: item.product.price,
+      }));
+  
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(orderItems);
+  
+      if (itemsError) throw itemsError;
+  
+      // Clear cart
+      await clearCart();
+  
+      // Reload orders
+      await loadUserData(user.id);
+  
+      return orderNumber;
+    } catch (error) {
+      console.error('Error creating order:', error);
+      throw error;
+    }
+  }, [user, cart, selectedAddress, selectedPaymentMethod]);
 
   const addAddress = useCallback(async (address: Omit<Address, 'id'>) => {
     if (!user) return;
@@ -436,6 +627,7 @@ export const [AppContext, useApp] = createContextHook(() => {
           type: method.type,
           card_number: method.cardNumber,
           card_holder: method.cardHolder,
+          expiry_date: method.expiryDate,
           is_default: paymentMethods.length === 0,
         })
         .select()
@@ -444,6 +636,7 @@ export const [AppContext, useApp] = createContextHook(() => {
       if (error) throw error;
 
       await loadUserData(user.id);
+      return data;
     } catch (error) {
       console.error('Error adding payment method:', error);
       throw error;
@@ -507,6 +700,7 @@ export const [AppContext, useApp] = createContextHook(() => {
       favorites,
       cartTotal,
       loading,
+      error,
       completeOnboarding,
       login,
       signup,
@@ -517,6 +711,7 @@ export const [AppContext, useApp] = createContextHook(() => {
       updateCartItem,
       removeFromCart,
       clearCart,
+      createOrder,
       addAddress,
       updateAddress,
       deleteAddress,
@@ -525,6 +720,8 @@ export const [AppContext, useApp] = createContextHook(() => {
       deletePaymentMethod,
       setSelectedPaymentMethod,
       toggleFavorite,
+      refreshCart,
+      loadUserData,
     }),
     [
       isAuthenticated,
@@ -539,6 +736,7 @@ export const [AppContext, useApp] = createContextHook(() => {
       favorites,
       cartTotal,
       loading,
+      error,
       completeOnboarding,
       login,
       signup,
@@ -548,12 +746,14 @@ export const [AppContext, useApp] = createContextHook(() => {
       updateCartItem,
       removeFromCart,
       clearCart,
+      createOrder,
       addAddress,
       updateAddress,
       deleteAddress,
       addPaymentMethod,
       deletePaymentMethod,
       toggleFavorite,
+      refreshCart,
     ]
   );
 });

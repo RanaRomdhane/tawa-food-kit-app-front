@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import React from 'react';
+import React, { useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { ChevronLeft, X, MapPin } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import { useApp } from '@/contexts/AppContext';
@@ -17,9 +18,24 @@ import colors from '@/constants/colors';
 export default function Cart() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { cart, updateCartItem, removeFromCart, cartTotal, selectedAddress } = useApp();
+  const { 
+    cart, 
+    updateCartItem, 
+    removeFromCart, 
+    cartTotal, 
+    selectedAddress, 
+    refreshCart 
+  } = useApp();
 
-  const handleUpdateQuantity = async (index: number, newQuantity: number) => {
+  // Refresh cart when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      console.log('🔄 CART - Screen focused, refreshing cart');
+      refreshCart();
+    }, [refreshCart])
+  );
+
+  const handleUpdateQuantity = async (cartItemId: string, currentQuantity: number, newQuantity: number) => {
     if (newQuantity < 1) {
       Alert.alert(
         'Remove Item',
@@ -29,25 +45,25 @@ export default function Cart() {
           {
             text: 'Remove',
             style: 'destructive',
-            onPress: () => removeFromCart(index),
+            onPress: () => removeFromCart(cartItemId),
           },
         ]
       );
       return;
     }
-    await updateCartItem(index, newQuantity);
+    await updateCartItem(cartItemId, newQuantity);
   };
 
-  const handleRemove = (index: number) => {
+  const handleRemove = (cartItemId: string, productName: string) => {
     Alert.alert(
       'Remove Item',
-      'Are you sure you want to remove this item from cart?',
+      `Are you sure you want to remove "${productName}" from cart?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Remove',
           style: 'destructive',
-          onPress: () => removeFromCart(index),
+          onPress: () => removeFromCart(cartItemId),
         },
       ]
     );
@@ -65,11 +81,14 @@ export default function Cart() {
 
       <ScrollView
         style={styles.content}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+        contentContainerStyle={{ 
+          paddingBottom: insets.bottom + 20,
+          flexGrow: cart.length === 0 ? 1 : 0 
+        }}
         showsVerticalScrollIndicator={false}
       >
         {cart.map((item, index) => (
-          <View key={`${item.product.id}-${index}`} style={styles.cartItem}>
+          <View key={`${item.id}-${index}`} style={styles.cartItem}>
             <Image
               source={{ uri: item.product.image }}
               style={styles.itemImage}
@@ -79,20 +98,27 @@ export default function Cart() {
             <View style={styles.itemDetails}>
               <Text style={styles.itemName} numberOfLines={2}>{item.product.name}</Text>
               <Text style={styles.itemPrice}>{item.product.price} DT</Text>
-              {item.size && <Text style={styles.itemMeta}>Size: {item.size}</Text>}
-              {item.cooked && <Text style={styles.itemMeta}>Cooked (+2 DT)</Text>}
+              
+              <View style={styles.itemMetaContainer}>
+                {item.size && (
+                  <Text style={styles.itemMeta}>Size: {item.size}</Text>
+                )}
+                {item.cooked && (
+                  <Text style={styles.itemMeta}>Cooked (+2 DT)</Text>
+                )}
+              </View>
 
               <View style={styles.quantityControls}>
                 <TouchableOpacity
                   style={styles.quantityButton}
-                  onPress={() => handleUpdateQuantity(index, item.quantity - 1)}
+                  onPress={() => item.id && handleUpdateQuantity(item.id, item.quantity, item.quantity - 1)}
                 >
                   <Text style={styles.quantityButtonText}>−</Text>
                 </TouchableOpacity>
                 <Text style={styles.quantityText}>{item.quantity}</Text>
                 <TouchableOpacity
                   style={styles.quantityButton}
-                  onPress={() => handleUpdateQuantity(index, item.quantity + 1)}
+                  onPress={() => item.id && handleUpdateQuantity(item.id, item.quantity, item.quantity + 1)}
                 >
                   <Text style={styles.quantityButtonText}>+</Text>
                 </TouchableOpacity>
@@ -101,7 +127,7 @@ export default function Cart() {
 
             <TouchableOpacity
               style={styles.removeButton}
-              onPress={() => handleRemove(index)}
+              onPress={() => item.id && handleRemove(item.id, item.product.name)}
             >
               <X size={20} color={colors.white} />
             </TouchableOpacity>
@@ -225,6 +251,10 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700' as const,
     color: colors.white,
+    marginBottom: 4,
+  },
+  itemMetaContainer: {
+    marginBottom: 8,
   },
   itemMeta: {
     fontSize: 12,
@@ -240,7 +270,6 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    marginTop: 8,
   },
   quantityButton: {
     width: 20,
